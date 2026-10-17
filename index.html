@@ -213,6 +213,11 @@ async function saveProject_(p){await DB.put("projects",clean(p));const k=project
 async function saveIssue_(i){await DB.put("issues",clean(i));const k=issues.findIndex(x=>x.id===i.id);if(k<0)issues.push(i);else issues[k]=i}
 async function delIssue_(id){await DB.del("issues",id);issues=issues.filter(x=>x.id!==id)}
 async function delProject_(id){await DB.del("projects",id);projects=projects.filter(x=>x.id!==id)}
+/* keep issue numbers 1..n with no gaps, in their current order */
+async function renumber(pid){
+  const list=issues.filter(i=>i.projectId===pid).sort((a,b)=>(a.num||0)-(b.num||0)||(a.createdAt||"").localeCompare(b.createdAt||""));
+  for(const [k,i] of list.entries()){if(i.num!==k+1){i.num=k+1;await DB.put("issues",clean(i))}}
+}
 
 /* photos are stored as ArrayBuffer + type (works on every phone browser) */
 const urls=new Map();
@@ -362,7 +367,7 @@ async function cancelIssue(){if(draft){const add=draft._added;draft=null;for(con
 async function deleteIssue(btn){
   if(!btn.classList.contains("armed")){btn.classList.add("armed");btn.textContent="Tap again to delete";return}
   const i=issues.find(x=>x.id===draft.id);const ids=new Set([...(i?.photos||[]),...draft.photos,...draft._added,...draft._removed]);
-  try{await delIssue_(draft.id);for(const a of ids)await delPhoto(a);draft=null;closeSheet();render();toast("Issue deleted")}
+  try{const pid=draft.projectId;await delIssue_(draft.id);for(const a of ids)await delPhoto(a);await renumber(pid);draft=null;closeSheet();render();toast("Issue deleted. Issues renumbered.")}
   catch(e){toast("Couldn't delete. Try again.")}
 }
 
@@ -519,6 +524,8 @@ function openReport(){
   <div class="sh-body">
     <div class="note">${c.total} issues · ${c.Open} open · ${c.Fixed} fixed · ${c.Closed} closed</div>
     <div class="f"><span class="lbl">Include</span>${segHTML("r-scope",["All issues","Not closed","Closed only"],"All issues")}</div>
+    <div class="f"><span class="lbl">Photo size</span>${segHTML("r-photos",["Compact","Large","Full width"],store.get("pl:layout")||"Compact")}
+      <p class="hint">Compact: like Site Report Expert, one main photo and small extras. Large: every photo big, 2 per row. Full width: every photo across the page, best for small details.</p></div>
     <label class="f"><span>File name</span><input id="r-name" value="${esc(fileBase(p))}"></label>
     <div class="g2"><button class="btn primary" data-act="pdf" id="pdfBtn">Make PDF report</button><button class="btn" data-act="csv">Make spreadsheet (CSV)</button></div>
     <p class="hint" id="r-status">The PDF has a cover with your signature, project details, a summary and every issue with photos and comments.</p>
@@ -549,8 +556,10 @@ async function exportPDF(){
   if(!window.jspdf){toast("The PDF tool didn't load. Reopen the app and try again.");return}
   btn.disabled=true;$("#r-ready").hidden=true;
   try{
-    const imgs={};let n=0;const tot=list.reduce((a,i)=>a+(i.photos||[]).length,0);
-    for(const i of list)for(const [k,id] of (i.photos||[]).entries()){if(k>6)break;st.textContent=`Preparing photos ${++n} of ${tot}…`;imgs[id]=await toDataURL(id,k===0?700:360)}
+    const imgs={};let n=0;
+    const layout=radioVal("r-photos")||"Compact", big=layout!=="Compact"; store.set("pl:layout",layout);
+    const tot=big?list.reduce((a,i)=>a+(i.photos||[]).length,0):list.reduce((a,i)=>a+Math.min(7,(i.photos||[]).length),0);
+    for(const i of list)for(const [k,id] of (i.photos||[]).entries()){if(!big&&k>6)break;st.textContent=`Preparing photos ${++n} of ${tot}…`;imgs[id]=await toDataURL(id,big?(layout==="Full width"?1400:1000):(k===0?700:360))}
     const sigImg=p.signatureId?await toDataURL(p.signatureId,500):null;
     st.textContent="Building PDF…";
     const doc=new window.jspdf.jsPDF({unit:"mm",format:"a4",compress:true});const W=210,H=297,M=15;
@@ -577,22 +586,54 @@ async function exportPDF(){
     const pc={Low:0,Medium:0,High:0};list.forEach(i=>pc[i.priority||"Medium"]++);
     bars("Priority",[["High",pc.High,[184,50,28]],["Medium",pc.Medium,[242,183,5]],["Low",pc.Low,[120,130,140]]],140);
     doc.addPage();section("Issues",20);y=36;
-    const LX=M+66,VX=LX+26,VW=W-M-VX,LH=4.6;
-    for(const i of list){
+    const LH=4.6;
+    /* issue details (fields + comments) in a column from LX; returns the y where it ends */
+    const prepDetails=(i,VW)=>{
       const rows=[["Issue",i.title,true],["Reference",`Issue #${i.num}`],i.location&&["Location",i.location],["Date raised",fmtD(i.dateRaised)],i.assignTo&&["Assign to",i.assignTo],["Status",i.status],["Priority",i.priority],i.fixBy&&["Fix by date",fmtD(i.fixBy)],i.status==="Closed"&&i.closedAt&&["Closed",fmtDT(i.closedAt)],i.description&&["Description",i.description]].filter(Boolean);
       doc.setFontSize(10);
       const lines=rows.map(r=>doc.splitTextToSize(String(r[1]||""),VW));
       const cms=(i.comments||[]).slice().sort(byTime).map(cm=>[fmtDT(cm.at),doc.splitTextToSize(cm.text,VW)]);
       const th=lines.reduce((a,l)=>a+l.length*LH+1.2,0)+cms.reduce((a,[,l])=>a+(l.length+1)*LH+2,0)+2;
-      const ph=(i.photos||[]);const bh=Math.max(th,ph.length?60:20);
-      if(y+Math.min(bh,H-60)>H-18){doc.addPage();y=20}
-      if(ph[0]&&imgs[ph[0]]){const im=imgs[ph[0]];const w=45,h=Math.min(60,w*im.h/im.w);doc.addImage(im.u,"JPEG",M,y,w,h)}
-      ph.slice(1,7).forEach((id,k)=>{const im=imgs[id];if(!im)return;const col=k>=3?1:0,row=k%3;const w=8.5,h=Math.min(19,w*im.h/im.w);doc.addImage(im.u,"JPEG",M+47+col*9.5,y+row*20,w,h)});
-      let ty=y+3.5;
-      rows.forEach((r,k)=>{doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text(r[0]+":",LX,ty);doc.setTextColor(...NAVY);doc.setFont("helvetica",r[2]?"bold":"normal");doc.text(lines[k],VX,ty);ty+=lines[k].length*LH+1.2});
-      if(cms.length){doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text("Comments:",LX,ty);
-        cms.forEach(([t,l])=>{if(ty>H-22){doc.addPage();ty=24}doc.setTextColor(...GREY);doc.setFontSize(9);doc.text(t,VX,ty);ty+=LH;doc.setFontSize(10);doc.setTextColor(...NAVY);doc.text(l,VX,ty);ty+=l.length*LH+2})}
-      const endY=Math.max(ty,y+(ph.length?61:18));doc.setDrawColor(...LINE);doc.line(M,endY,W-M,endY);y=endY+5;
+      return {rows,lines,cms,th};
+    };
+    const drawDetails=(d,LX,VX,y0)=>{
+      let ty=y0+3.5;doc.setFontSize(10);
+      d.rows.forEach((r,k)=>{doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text(r[0]+":",LX,ty);doc.setTextColor(...NAVY);doc.setFont("helvetica",r[2]?"bold":"normal");doc.text(d.lines[k],VX,ty);ty+=d.lines[k].length*LH+1.2});
+      if(d.cms.length){doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text("Comments:",LX,ty);
+        d.cms.forEach(([t,l])=>{if(ty>H-22){doc.addPage();ty=24}doc.setTextColor(...GREY);doc.setFontSize(9);doc.text(t,VX,ty);ty+=LH;doc.setFontSize(10);doc.setTextColor(...NAVY);doc.text(l,VX,ty);ty+=l.length*LH+2})}
+      return ty;
+    };
+    if(!big){
+      const LX=M+66,VX=LX+26,VW=W-M-VX;
+      for(const i of list){
+        const d=prepDetails(i,VW);const ph=(i.photos||[]);const bh=Math.max(d.th,ph.length?60:20);
+        if(y+Math.min(bh,H-60)>H-18){doc.addPage();y=20}
+        if(ph[0]&&imgs[ph[0]]){const im=imgs[ph[0]];const w=45,h=Math.min(60,w*im.h/im.w);doc.addImage(im.u,"JPEG",M,y,w,h)}
+        ph.slice(1,7).forEach((id,k)=>{const im=imgs[id];if(!im)return;const col=k>=3?1:0,row=k%3;const w=8.5,h=Math.min(19,w*im.h/im.w);doc.addImage(im.u,"JPEG",M+47+col*9.5,y+row*20,w,h)});
+        const ty=drawDetails(d,LX,VX,y);
+        const endY=Math.max(ty,y+(ph.length?61:18));doc.setDrawColor(...LINE);doc.line(M,endY,W-M,endY);y=endY+5;
+      }
+    } else {
+      /* large-photo layouts: details across the page, then every photo big, 2 per row or 1 per row */
+      const cols=layout==="Full width"?1:2, gap=5, colW=(W-2*M-gap*(cols-1))/cols, maxH=cols===1?150:112, CAP=5;
+      const LX=M+2,VX=M+32,VW=W-M-VX;
+      for(const i of list){
+        const d=prepDetails(i,VW);
+        const ph=(i.photos||[]).filter(id=>imgs[id]);
+        const firstRowH=ph.length?Math.max(...ph.slice(0,cols).map(id=>{const im=imgs[id];return Math.min(maxH,colW*im.h/im.w)}))+CAP+3:0;
+        if(y+Math.min(d.th+8+firstRowH,H-40)>H-16){doc.addPage();y=20}
+        doc.setFillColor(236,239,242);doc.rect(M,y,W-2*M,1.2,"F");y+=2;
+        y=drawDetails(d,LX,VX,y)+2;
+        for(let r=0;r<ph.length;r+=cols){
+          const row=ph.slice(r,r+cols).map(id=>{const im=imgs[id];let w=colW,h=w*im.h/im.w;if(h>maxH){h=maxH;w=h*im.w/im.h}return{im,w,h,n:(i.photos||[]).indexOf(id)+1}});
+          const rh=Math.max(...row.map(o=>o.h))+CAP;
+          if(y+rh>H-16){doc.addPage();y=20}
+          row.forEach((o,c)=>{const x=M+c*(colW+gap)+(colW-o.w)/2;doc.addImage(o.im.u,"JPEG",x,y,o.w,o.h);doc.setDrawColor(...LINE);doc.rect(x,y,o.w,o.h);
+            doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...GREY);doc.text(`Issue #${i.num} · ${i.title} · photo ${o.n} of ${(i.photos||[]).length}`,x,y+o.h+3.6,{maxWidth:Math.max(o.w,60)})});
+          y+=rh+3;
+        }
+        doc.setDrawColor(...LINE);doc.line(M,y,W-M,y);y+=6;
+      }
     }
     const np=doc.getNumberOfPages();
     for(let k=2;k<=np;k++){doc.setPage(k);doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(...GREY);
@@ -624,7 +665,7 @@ async function importBackup(file){
     if(d.app!=="site-punch-list"||!Array.isArray(d.projects))throw new Error("format");
     let np=0;for(const [id,ph] of Object.entries(d.photos||{})){await DB.put("photos",{id,type:ph.type||"image/jpeg",data:unb64(ph.data)});np++}
     for(const i of d.issues||[])await saveIssue_(i);
-    for(const p of d.projects)await saveProject_(p);
+    for(const p of d.projects){await saveProject_(p);await renumber(p.id)}
     render();toast(`Imported ${d.projects.map(p=>p.name).join(", ")}: ${(d.issues||[]).length} issues, ${np} photos`,5000);
   }catch(e){toast(e&&e.name==="QuotaExceededError"?"Not enough storage space on this phone.":"That file isn't a Site Punch List backup.",5000)}
 }
@@ -678,6 +719,7 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=
   try{
     await DB.open();
     [projects,issues]=await Promise.all([DB.all("projects"),DB.all("issues")]);
+    for(const p of projects)await renumber(p.id);
     ready=true;
     const lastId=store.get("pl:last");if(lastId&&projects.some(p=>p.id===lastId))view={name:"project",id:lastId};
   }catch(e){dbError="This browser blocked on-device storage.";}

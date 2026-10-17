@@ -1,6 +1,6 @@
 // Site Punch List service worker: keeps the app itself available offline.
 // Your projects and photos are not stored here; they live in the phone's on-device database.
-const CACHE = "site-punch-list-v1";
+const CACHE = "site-punch-list-v2";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "jspdf.umd.min.js",
   "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png",
