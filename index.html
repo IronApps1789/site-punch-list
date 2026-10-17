@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Site Punch List</title>
+<meta name="description" content="Offline punch list for site inspections: photos, markup, comments and PDF reports.">
+<meta name="theme-color" content="#16202B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Punch List">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+@font-face{font-family:"Barlow";src:url(fonts/barlow-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Barlow";src:url(fonts/barlow-latin-600-normal.woff2) format("woff2");font-weight:500 600;font-display:swap}
+@font-face{font-family:"Barlow";src:url(fonts/barlow-latin-700-normal.woff2) format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:"Barlow Condensed";src:url(fonts/barlow-condensed-latin-700-normal.woff2) format("woff2");font-weight:600 700;font-display:swap}
+@font-face{font-family:"IBM Plex Mono";src:url(fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:"IBM Plex Mono";src:url(fonts/ibm-plex-mono-latin-600-normal.woff2) format("woff2");font-weight:600;font-display:swap}
+/* Layout: one-column field tool, ink header band with a hazard strip, issue cards with photo on the left like the paper report */
+:root{
+  --bg:#ECEFF2; --surface:#FFFFFF; --sunk:#E2E6EA; --ink:#16202B; --muted:#5A6573; --line:#D2D8DF;
+  --accent:#F2B705; --on-accent:#16202B; --band:#16202B; --on-band:#F4F6F8;
+  --open:#C9580A; --open-bg:#FCE9DA; --fixed:#2D64BE; --fixed-bg:#DFE9F8; --closed:#257A4C; --closed-bg:#DCF0E4; --danger:#B8321C;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0E1318; --surface:#172029; --sunk:#111920; --ink:#E7EBEF; --muted:#97A3AF; --line:#2A3641;
+  --accent:#F5C12E; --on-accent:#16202B; --band:#0A0E12; --on-band:#E7EBEF;
+  --open:#F08B43; --open-bg:#3A2415; --fixed:#77A6F2; --fixed-bg:#1B2A42; --closed:#56C287; --closed-bg:#163024; --danger:#F06B55;
+  color-scheme:dark}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+img{max-width:100%}
+[hidden]{display:none!important}
+button,input,select,textarea{font:inherit;color:inherit}
+input,textarea{font-size:16px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:980px;margin:0 auto}
+
+.top{position:sticky;top:0;z-index:5;background:var(--band);color:var(--on-band);padding-top:env(safe-area-inset-top,0px)}
+.top .row{display:flex;align-items:center;gap:10px;padding-block:10px;min-height:58px}
+.top h1{font-family:var(--display);font-weight:700;font-size:1.45rem;letter-spacing:.02em;margin:0;text-transform:uppercase;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.top .sub{display:block;font-family:var(--body);font-weight:500;font-size:.8rem;letter-spacing:.04em;text-transform:none;opacity:.7;overflow:hidden;text-overflow:ellipsis}
+.hazard{height:6px;background:repeating-linear-gradient(-45deg,var(--accent) 0 10px,var(--band) 10px 20px)}
+.iconbtn{background:transparent;border:1px solid rgba(244,246,248,.3);color:var(--on-band);border-radius:8px;height:40px;min-width:40px;padding:0 11px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+
+main{padding-block:18px calc(120px + env(safe-area-inset-bottom,0px))}
+.h2{font-family:var(--display);font-size:1.3rem;text-transform:uppercase;letter-spacing:.04em;margin:0}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.muted{color:var(--muted)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.danger.armed{background:var(--danger);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.block{width:100%}
+
+.banner{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;display:grid;gap:8px;font-size:.92rem}
+.banner b{font-size:1rem}
+.banner .acts{display:flex;gap:8px;flex-wrap:wrap}
+
+.plist{display:grid;gap:12px}
+.pcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;cursor:pointer}
+.pcard .nm{font-family:var(--mono);font-weight:600;font-size:1rem;word-break:break-word}
+.pcard .meta{color:var(--muted);font-size:.9rem;margin-top:2px}
+.prog{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:.85rem;font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.track{flex:1;min-width:120px;height:8px;border-radius:4px;background:var(--sunk);overflow:hidden;display:flex}
+.track i{display:block;height:100%}
+.foot{margin-top:28px;display:grid;gap:10px}
+.foot .row{display:flex;gap:8px;flex-wrap:wrap}
+.foot p{margin:0;font-size:.85rem;color:var(--muted)}
+
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.tile{background:var(--surface);padding:12px 6px;text-align:center}
+.tile b{display:block;font-family:var(--display);font-size:1.9rem;line-height:1;font-variant-numeric:tabular-nums}
+.tile span{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tile.o b{color:var(--open)} .tile.f b{color:var(--fixed)} .tile.c b{color:var(--closed)}
+
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.seg{display:inline-flex;background:var(--sunk);border-radius:8px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg label{position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;padding:8px 12px;border-radius:6px;font-weight:600;font-size:.9rem;cursor:pointer;color:var(--muted)}
+.seg input:checked+span{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.search{flex:1;min-width:160px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 12px}
+
+.ilist{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:10px}
+.icard{display:flex;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;cursor:pointer;text-align:left;width:100%;align-items:stretch}
+.thumb{flex:0 0 78px;height:104px;border-radius:6px;background:var(--sunk) center/cover no-repeat;position:relative}
+.thumb .n{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;font-size:.7rem;padding:1px 5px;border-radius:4px}
+.icard .body{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.idl{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.door{font-family:var(--mono);font-weight:600;font-size:1.05rem}
+.ref{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.last{font-size:.92rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:4px;font-size:.78rem}
+.pill{padding:2px 8px;border-radius:999px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;font-size:.72rem}
+.pill.Open{background:var(--open-bg);color:var(--open)} .pill.Fixed{background:var(--fixed-bg);color:var(--fixed)} .pill.Closed{background:var(--closed-bg);color:var(--closed)}
+.chip{padding:2px 8px;border-radius:999px;background:var(--sunk);color:var(--muted);font-variant-numeric:tabular-nums}
+.chip.late,.chip.High{color:var(--danger);font-weight:700}
+
+.empty{border:2px dashed var(--line);border-radius:var(--r);padding:32px 20px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--ink);font-size:1.1rem;margin-bottom:4px}
+
+.fab{position:fixed;right:max(16px,calc(env(safe-area-inset-right,0px) + 16px));bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:4;background:var(--accent);color:var(--on-accent);border:0;border-radius:999px;padding:15px 24px;font-weight:700;font-size:1.05rem;box-shadow:0 6px 18px rgba(0,0,0,.3);cursor:pointer}
+
+.sheet-wrap{position:fixed;inset:0;z-index:20;background:rgba(8,12,16,.55);display:flex;justify-content:center;align-items:flex-end}
+@media (min-width:720px){.sheet-wrap{align-items:center}}
+.sheet{background:var(--surface);width:100%;max-width:680px;max-height:calc(100% - env(safe-area-inset-top,0px) - 8px);display:flex;flex-direction:column;border-radius:14px 14px 0 0}
+@media (min-width:720px){.sheet{border-radius:14px;max-height:92%}}
+.sh-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.sh-head h3{margin:0;font-family:var(--display);font-size:1.25rem;text-transform:uppercase;letter-spacing:.03em;flex:1;min-width:0}
+.sh-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;display:grid;gap:14px}
+.sh-foot{display:flex;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);flex-wrap:wrap}
+.sh-foot .sp{flex:1}
+.f{display:grid;gap:4px;min-width:0}
+.f>span,.lbl{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.f input,.f textarea,.f select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px 11px;width:100%;min-width:0}
+.f textarea{min-height:70px;resize:vertical}
+.f input.mono{font-family:var(--mono);font-weight:600}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.ph{position:relative;aspect-ratio:3/4;max-width:100%;border-radius:8px;background:var(--sunk) center/cover no-repeat;border:1px solid var(--line);cursor:pointer;padding:0}
+.ph.main{outline:3px solid var(--accent);outline-offset:-3px}
+.ph .x{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.7);color:#fff;cursor:pointer;font-weight:700;line-height:30px;text-align:center}
+.ph .tag{position:absolute;left:4px;bottom:4px;background:var(--accent);color:var(--on-accent);font-size:.66rem;font-weight:700;padding:1px 5px;border-radius:4px;text-transform:uppercase}
+.ph.busy{display:grid;place-items:center;font-size:.8rem;color:var(--muted);cursor:default}
+.addph{position:relative;overflow:hidden;aspect-ratio:3/4;border:2px dashed var(--line);border-radius:8px;display:grid;place-items:center;text-align:center;font-weight:600;font-size:.85rem;color:var(--muted);cursor:pointer;padding:6px}
+.addph input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.addph.cam{border-color:var(--accent);color:var(--ink)}
+.hint{font-size:.82rem;color:var(--muted);margin:0}
+.cm{border-left:3px solid var(--line);padding:2px 0 2px 10px;display:flex;gap:8px}
+.cm .t{font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.cm .tx{white-space:pre-wrap;word-break:break-word}
+.cm div{flex:1;min-width:0}
+.cm button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 6px;align-self:flex-start}
+.cm-add{display:flex;gap:8px;align-items:flex-end}
+.cm-add textarea{flex:1;min-height:48px}
+.sig{border:1px solid var(--line);border-radius:8px;background:#fff;width:100%;height:140px;touch-action:none;display:block}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 86px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:40;font-weight:600;max-width:calc(100% - 32px);text-align:center}
+.note{background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:.9rem}
+.ready{display:grid;gap:8px}
+
+.mk{position:fixed;inset:0;z-index:30;background:#0B0F13;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.mk-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-block:10px;color:#E7EBEF}
+.mk-bar .t{border:1px solid #3A4652;background:transparent;color:#E7EBEF;border-radius:8px;padding:8px 11px;font-weight:600;cursor:pointer;min-height:40px}
+.mk-bar .t.on{background:#F5C12E;color:#16202B;border-color:#F5C12E}
+.sw{width:34px;height:34px;border-radius:50%;border:2px solid #3A4652;cursor:pointer;padding:0}
+.sw.on{border-color:#F5C12E;box-shadow:0 0 0 2px #0B0F13 inset}
+.mk-stage{flex:1;min-height:0;display:grid;place-items:center;padding:8px}
+.mk-stage canvas{max-width:100%;max-height:100%;touch-action:none;background:#222}
+.grow{flex:1}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(5,minmax(0,1fr))}.tile b{font-size:1.4rem}.tile span{font-size:.6rem;letter-spacing:.04em}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="gut"><div class="wrap row" id="topRow"></div></div>
+  <div class="hazard"></div>
+</header>
+<main class="gut"><div class="wrap" id="main"></div></main>
+<div id="fabSlot"></div>
+<div class="sheet-wrap" id="sheet" hidden><div class="sheet" role="dialog" aria-modal="true" id="sheetBox"></div></div>
+<div class="mk" id="mk" hidden></div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="importIn" accept=".json,application/json" hidden>
+
+<script src="jspdf.umd.min.js"></script>
+<script>
+"use strict";
+const STATUSES=["Open","Fixed","Closed"], PRIORITIES=["Low","Medium","High"];
+let projects=[], issues=[], ready=false, dbError="";
+let view={name:"home"}, filter="all", query="";
+let draft=null, pdraft=null, built=null, installEvt=null;
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const localISO=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const today=()=>localISO().slice(0,10);
+const fmtD=s=>s?`${s.slice(8,10)}-${s.slice(5,7)}-${s.slice(0,4)}`:"";
+const fmtDT=s=>s?`${fmtD(s)} ${s.slice(11,16)}`:"";
+const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,"");
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const standalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+
+function toast(msg,ms=2800){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,ms)}
+
+/* ---------- on-device storage (IndexedDB) ---------- */
+const DB={db:null,
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open("site-punch-list",1);
+    r.onupgradeneeded=()=>{const d=r.result;["projects","issues","photos"].forEach(n=>{if(!d.objectStoreNames.contains(n))d.createObjectStore(n,{keyPath:"id"})})};
+    r.onsuccess=()=>{DB.db=r.result;res()};r.onerror=()=>rej(r.error)})},
+  run(name,mode,fn){return new Promise((res,rej)=>{const t=DB.db.transaction(name,mode);const r=fn(t.objectStore(name));
+    t.oncomplete=()=>res(r&&("result" in r)?r.result:undefined);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error("aborted"))})},
+  all(n){return DB.run(n,"readonly",s=>s.getAll())},
+  get(n,id){return DB.run(n,"readonly",s=>s.get(id))},
+  put(n,v){return DB.run(n,"readwrite",s=>s.put(v))},
+  del(n,id){return DB.run(n,"readwrite",s=>s.delete(id))},
+};
+const clean=o=>JSON.parse(JSON.stringify(o));
+async function saveProject_(p){await DB.put("projects",clean(p));const k=projects.findIndex(x=>x.id===p.id);if(k<0)projects.push(p);else projects[k]=p}
+async function saveIssue_(i){await DB.put("issues",clean(i));const k=issues.findIndex(x=>x.id===i.id);if(k<0)issues.push(i);else issues[k]=i}
+async function delIssue_(id){await DB.del("issues",id);issues=issues.filter(x=>x.id!==id)}
+async function delProject_(id){await DB.del("projects",id);projects=projects.filter(x=>x.id!==id)}
+
+/* photos are stored as ArrayBuffer + type (works on every phone browser) */
+const urls=new Map();
+async function putPhoto(blob,id=uid()){await DB.put("photos",{id,type:blob.type||"image/jpeg",data:await blob.arrayBuffer()});return id}
+async function delPhoto(id){if(!id)return;try{await DB.del("photos",id)}catch(e){}const u=urls.get(id);if(u){URL.revokeObjectURL(u);urls.delete(id)}}
+async function photoBlob(id){const r=await DB.get("photos",id);return r?new Blob([r.data],{type:r.type}):null}
+async function photoURL(id){if(urls.has(id))return urls.get(id);const b=await photoBlob(id);if(!b)return "";const u=URL.createObjectURL(b);urls.set(id,u);return u}
+function hydrate(root=document){root.querySelectorAll("[data-pid]").forEach(el=>{const id=el.dataset.pid;if(!id)return;photoURL(id).then(u=>{if(u)el.style.backgroundImage=`url("${u}")`}).catch(()=>{})})}
+
+const projIssues=pid=>issues.filter(i=>i.projectId===pid).sort((a,b)=>(a.num||0)-(b.num||0));
+function counts(list){const c={total:list.length,Open:0,Fixed:0,Closed:0};list.forEach(i=>c[i.status||"Open"]++);c.pct=c.total?Math.round(c.Closed/c.total*100):0;return c}
+const byTime=(a,b)=>b.at.localeCompare(a.at);
+const latest=i=>{const c=(i.comments||[]).slice().sort(byTime)[0];return c?c.text:(i.description||"")};
+const isLate=i=>i.status!=="Closed"&&i.fixBy&&i.fixBy<today();
+
+/* ---------- render ---------- */
+function render(){
+  const top=$("#topRow"), main=$("#main"), fab=$("#fabSlot");
+  const p=view.name==="project"?projects.find(x=>x.id===view.id):null;
+  if(view.name==="project"&&!p&&ready){view={name:"home"}}
+  if(view.name==="project"&&p){
+    top.innerHTML=`<button class="iconbtn" data-act="home" aria-label="All projects">‹</button>
+      <h1>${esc(p.name)}<span class="sub">${esc([p.client,p.address].filter(Boolean).join(" · "))}</span></h1>
+      <button class="iconbtn" data-act="editProject">Details</button>
+      <button class="iconbtn" data-act="report">Report</button>`;
+    main.innerHTML=projectView(p);
+    fab.innerHTML=`<button class="fab" data-act="newIssue">+ New issue</button>`;
+  } else {
+    top.innerHTML=`<h1>Site Punch List<span class="sub">Works offline · saved on this phone</span></h1>
+      <button class="iconbtn" data-act="newProject">+ Project</button>`;
+    main.innerHTML=homeView(); fab.innerHTML="";
+  }
+  hydrate(main);
+}
+function installBanner(){
+  if(standalone()||store.get("pl:hideInstall"))return "";
+  const how=isIOS?`In Safari, tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b>.`
+    :installEvt?`Tap Install below.`:`In Chrome, tap <b>⋮</b>, then <b>Install app</b> or <b>Add to Home screen</b>.`;
+  return `<div class="banner"><b>Install on your phone</b><span>${how} Then always open it from the icon: it works without signal, and your data is kept safe.</span>
+    <div class="acts">${installEvt?`<button class="btn primary" data-act="install">Install</button>`:""}<button class="btn" data-act="hideInstall">Got it</button></div></div>`;
+}
+function homeView(){
+  if(dbError) return `<div class="empty"><b>Storage isn't available</b>${esc(dbError)} Private/incognito browsing blocks it; open the app normally.</div>`;
+  if(!ready) return `<div class="empty"><b>Loading…</b></div>`;
+  const foot=`<div class="foot"><span class="lbl">Backup &amp; move data</span>
+    <div class="row"><button class="btn" data-act="import">Import backup file</button></div>
+    <p id="usage">Everything is stored on this phone only. Export a backup from each project's Report screen to keep a copy or move it to another device.</p></div>`;
+  if(!projects.length) return installBanner()+`<div class="empty"><b>No projects yet</b>Create a project for each site walk, then add an issue per door or item.<br><br><button class="btn primary" data-act="newProject">+ New project</button></div>`+foot;
+  const list=projects.slice().sort((a,b)=>(b.startDate||"").localeCompare(a.startDate||""));
+  return installBanner()+`<div class="bar"><h2 class="h2">Projects</h2><span class="muted">${list.length} project${list.length>1?"s":""}</span></div>
+  <div class="plist">${list.map(p=>{const c=counts(projIssues(p.id));const w=n=>c.total?(n/c.total*100):0;
+    return `<button class="pcard" data-act="open" data-id="${p.id}">
+      <div class="nm">${esc(p.name)}</div>
+      <div class="meta">${esc([p.jobRef,p.client,p.address].filter(Boolean).join(" · "))}${p.startDate?` · ${fmtD(p.startDate)}`:""}</div>
+      <div class="prog"><div class="track"><i style="width:${w(c.Closed)}%;background:var(--closed)"></i><i style="width:${w(c.Fixed)}%;background:var(--fixed)"></i></div>
+      <span>${c.Open} open · ${c.Fixed} fixed · ${c.Closed}/${c.total} closed</span></div></button>`}).join("")}</div>`+foot;
+}
+function projectView(p){
+  const all=projIssues(p.id), c=counts(all), q=query.trim().toLowerCase();
+  const list=all.filter(i=>(filter==="all"||i.status===filter)&&(!q||[i.title,i.location,i.assignTo,i.description,...(i.comments||[]).map(c=>c.text)].join(" ").toLowerCase().includes(q)));
+  const segs=[["all","All"],["Open","Open"],["Fixed","Fixed"],["Closed","Closed"]];
+  return `<div class="tiles">
+    <div class="tile"><b>${c.total}</b><span>Issues</span></div>
+    <div class="tile o"><b>${c.Open}</b><span>Open</span></div>
+    <div class="tile f"><b>${c.Fixed}</b><span>Fixed</span></div>
+    <div class="tile c"><b>${c.Closed}</b><span>Closed</span></div>
+    <div class="tile"><b>${c.pct}%</b><span>Done</span></div></div>
+  <div class="tools"><div class="seg" role="radiogroup" aria-label="Filter by status">${segs.map(([v,l])=>`<label><input type="radio" name="flt" id="flt-${v}" value="${v}" ${filter===v?"checked":""}><span>${l}</span></label>`).join("")}</div>
+    <input class="search" id="search" type="search" placeholder="Search door, location, comment…" value="${esc(query)}"></div>
+  ${!all.length?`<div class="empty"><b>No issues logged</b>Tap “+ New issue” at each door: take a photo, mark it up, add a comment.</div>`:
+    !list.length?`<div class="empty"><b>Nothing matches</b>Try another filter or search.</div>`:
+  `<div class="ilist">${list.map(i=>`<button class="icard" data-act="issue" data-id="${i.id}">
+     <div class="thumb" data-pid="${(i.photos||[])[0]||""}">${(i.photos||[]).length>1?`<span class="n">${i.photos.length}</span>`:""}</div>
+     <div class="body"><div class="idl"><span class="door">${esc(i.title)}</span><span class="ref">Issue #${i.num}${i.location?` · ${esc(i.location)}`:""}</span></div>
+     <div class="last">${esc(latest(i))||'<span class="muted">No comments</span>'}</div>
+     <div class="chips"><span class="pill ${i.status}">${i.status}</span><span class="chip ${i.priority}">${i.priority}</span>${i.assignTo?`<span class="chip">${esc(i.assignTo)}</span>`:""}${i.fixBy?`<span class="chip ${isLate(i)?"late":""}">Fix by ${fmtD(i.fixBy)}</span>`:""}</div></div></button>`).join("")}</div>`}`;
+}
+
+/* ---------- sheet helpers ---------- */
+function openSheet(html){$("#sheetBox").innerHTML=html;$("#sheet").hidden=false;document.body.style.overflow="hidden"}
+function closeSheet(){$("#sheet").hidden=true;$("#sheetBox").innerHTML="";document.body.style.overflow="";built=null}
+const segHTML=(name,vals,cur)=>`<div class="seg">${vals.map(v=>`<label><input type="radio" name="${name}" id="${name}-${v.replace(/\W/g,"")}" value="${v}" ${cur===v?"checked":""}><span>${v}</span></label>`).join("")}</div>`;
+const radioVal=n=>{const e=document.querySelector(`input[name="${n}"]:checked`);return e?e.value:null};
+
+/* ---------- issue editor ---------- */
+function openIssue(id){
+  const p=projects.find(x=>x.id===view.id); if(!p) return;
+  const ex=id?issues.find(i=>i.id===id):null;
+  const last=projIssues(p.id).slice(-1)[0];
+  draft=ex?clean(ex):{id:uid(),projectId:p.id,title:"",location:"",status:"Open",priority:"Medium",assignTo:p.defaultAssignee||(last&&last.assignTo)||"",dateRaised:today(),fixBy:"",description:"",photos:[],comments:[]};
+  draft._new=!ex; draft._added=[]; draft._removed=[]; draft._busy=0;
+  const names=[...new Set(issues.map(i=>i.assignTo).filter(Boolean))];
+  openSheet(`<div class="sh-head"><h3>${ex?`Issue #${ex.num}`:"New issue"}</h3><button class="btn" data-act="cancelIssue">Close</button></div>
+  <div class="sh-body">
+    <div class="g2"><label class="f"><span>Door / item ID</span><input class="mono" id="i-title" value="${esc(draft.title)}" placeholder="e.g. C23.3A" autocomplete="off" autocapitalize="characters"></label>
+      <label class="f"><span>Location</span><input id="i-loc" value="${esc(draft.location)}" placeholder="e.g. Corridor L2"></label></div>
+    <div class="f"><span class="lbl">Photos</span><div class="ph-grid" id="ph-grid"></div>
+      <p class="hint">Tap a photo to circle or arrow the problem. The first photo is the main one in the report.</p></div>
+    <div class="f"><span class="lbl">Comments</span>
+      <div class="cm-add"><label class="f" style="flex:1"><textarea id="i-cm" placeholder="e.g. Drop down seal needs to be activated"></textarea></label><button class="btn primary" data-act="addComment">Add</button></div>
+      <div id="cm-list" style="display:grid;gap:8px;margin-top:6px"></div></div>
+    <div class="f"><span class="lbl">Status</span>${segHTML("i-status",STATUSES,draft.status)}</div>
+    <div class="f"><span class="lbl">Priority</span>${segHTML("i-prio",PRIORITIES,draft.priority)}</div>
+    <div class="g2"><label class="f"><span>Assign to</span><input id="i-assign" list="assignees" value="${esc(draft.assignTo)}"><datalist id="assignees">${names.map(n=>`<option value="${esc(n)}">`).join("")}</datalist></label>
+      <label class="f"><span>Fix by</span><input type="date" id="i-fix" value="${esc(draft.fixBy)}"></label>
+      <label class="f"><span>Date raised</span><input type="date" id="i-raised" value="${esc(draft.dateRaised)}"></label></div>
+    <label class="f"><span>Description</span><textarea id="i-desc" placeholder="Background, e.g. door only tested from one side">${esc(draft.description)}</textarea></label>
+  </div>
+  <div class="sh-foot">${ex?`<button class="btn danger" data-act="delIssue">Delete</button>`:""}<span class="sp"></span>
+    <button class="btn" data-act="cancelIssue">Cancel</button><button class="btn primary" data-act="saveIssue" id="saveIssue">Save issue</button></div>`);
+  renderPhotos(); renderComments();
+}
+function renderPhotos(){
+  const g=$("#ph-grid"); if(!g||!draft) return;
+  g.innerHTML=draft.photos.map((id,k)=>`<button class="ph ${k===0?"main":""}" data-act="markup" data-k="${k}" data-pid="${id}" aria-label="Mark up photo ${k+1}">
+      ${k===0?`<span class="tag">Main</span>`:""}<span class="x" data-act="rmPhoto" data-k="${k}" role="button" aria-label="Remove photo">×</span></button>`).join("")
+    +Array.from({length:draft._busy},()=>`<div class="ph busy">Saving…</div>`).join("")
+    +`<label class="addph cam">📷<br>Take photo<input type="file" accept="image/*" capture="environment" id="camIn"></label>
+      <label class="addph">🖼️<br>From gallery<input type="file" accept="image/*" multiple id="fileIn"></label>`;
+  hydrate(g);
+}
+function renderComments(){
+  const l=$("#cm-list"); if(!l||!draft) return;
+  const cs=draft.comments.map((c,k)=>({...c,k})).sort(byTime);
+  l.innerHTML=cs.length?cs.map(c=>`<div class="cm"><div><div class="t">${fmtDT(c.at)}</div><div class="tx">${esc(c.text)}</div></div><button data-act="rmComment" data-k="${c.k}" aria-label="Delete comment">×</button></div>`).join(""):`<p class="hint">No comments yet.</p>`;
+}
+function readIssueForm(){
+  draft.title=$("#i-title").value.trim(); draft.location=$("#i-loc").value.trim();
+  draft.status=radioVal("i-status")||"Open"; draft.priority=radioVal("i-prio")||"Medium";
+  draft.assignTo=$("#i-assign").value.trim(); draft.fixBy=$("#i-fix").value; draft.dateRaised=$("#i-raised").value||today();
+  draft.description=$("#i-desc").value.trim();
+}
+async function saveIssue(){
+  readIssueForm();
+  const pend=$("#i-cm").value.trim(); if(pend){draft.comments.push({at:localISO(),text:pend});$("#i-cm").value=""}
+  if(!draft.title){toast("Add a door or item ID first.");$("#i-title").focus();return}
+  if(draft._busy){toast("Wait for photos to finish saving.");return}
+  const {_new,_added,_removed,_busy,...body}=draft;
+  if(body.status==="Closed"&&!body.closedAt) body.closedAt=localISO();
+  if(body.status!=="Closed") body.closedAt="";
+  body.updatedAt=localISO();
+  if(_new){body.num=Math.max(0,...projIssues(draft.projectId).map(i=>i.num||0))+1;body.createdAt=localISO()}
+  try{await saveIssue_(body);for(const a of _removed)await delPhoto(a);draft=null;closeSheet();render();toast(_new?`Issue #${body.num} saved`:"Issue saved")}
+  catch(e){toast(e&&e.name==="QuotaExceededError"?"The phone is out of storage space. Free some space and try again.":"Couldn't save. Try again.")}
+}
+async function cancelIssue(){if(draft){const add=draft._added;draft=null;for(const a of add)await delPhoto(a)}closeSheet()}
+async function deleteIssue(btn){
+  if(!btn.classList.contains("armed")){btn.classList.add("armed");btn.textContent="Tap again to delete";return}
+  const i=issues.find(x=>x.id===draft.id);const ids=new Set([...(i?.photos||[]),...draft.photos,...draft._added,...draft._removed]);
+  try{await delIssue_(draft.id);for(const a of ids)await delPhoto(a);draft=null;closeSheet();render();toast("Issue deleted")}
+  catch(e){toast("Couldn't delete. Try again.")}
+}
+
+/* ---------- photos ---------- */
+function loadImg(src){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=src})}
+async function fileToJpeg(file,max=1600){
+  const u=URL.createObjectURL(file);
+  try{const im=await loadImg(u);const s=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight));
+    const c=document.createElement("canvas");c.width=Math.round(im.naturalWidth*s);c.height=Math.round(im.naturalHeight*s);
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+    const b=await new Promise(r=>c.toBlob(r,"image/jpeg",.85));c.width=c.height=0;return b}finally{URL.revokeObjectURL(u)}
+}
+async function addFiles(files){
+  const d=draft; if(!d) return;
+  for(const f of files){
+    d._busy++; renderPhotos();
+    try{const b=await fileToJpeg(f);const id=await putPhoto(b);d.photos.push(id);d._added.push(id)}
+    catch(e){toast(e&&e.name==="QuotaExceededError"?"The phone is out of storage space.":"That photo couldn't be read. Try another.")}
+    finally{d._busy--; if(draft===d) renderPhotos()}
+  }
+}
+
+/* ---------- markup ---------- */
+const mk={shapes:[],tool:"ellipse",color:"#E2231A",img:null,k:0,cur:null};
+async function openMarkup(k){
+  readIssueForm();
+  mk.k=k; mk.shapes=[]; mk.cur=null;
+  const box=$("#mk"); box.hidden=false;
+  box.innerHTML=`<div class="gut mk-bar">
+     <button class="t" data-mk="cancel">Cancel</button><span class="grow"></span>
+     ${[["ellipse","◯ Circle"],["arrow","➚ Arrow"],["pen","✎ Pen"]].map(([t,l])=>`<button class="t ${mk.tool===t?"on":""}" data-mk="tool" data-v="${t}">${l}</button>`).join("")}
+     ${["#111111","#E2231A","#F5C12E","#FFFFFF"].map(c=>`<button class="sw ${mk.color===c?"on":""}" data-mk="color" data-v="${c}" style="background:${c}" aria-label="Colour ${c}"></button>`).join("")}
+     <button class="t" data-mk="undo">Undo</button>
+     ${k>0?`<button class="t" data-mk="main">Make main</button>`:""}
+     <span class="grow"></span><button class="t on" data-mk="save" id="mkSave">Done</button></div>
+   <div class="mk-stage"><canvas id="mkc"></canvas></div>`;
+  try{mk.img=await loadImg(await photoURL(draft.photos[k]))}catch(e){toast("Couldn't open that photo.");closeMarkup();return}
+  const c=$("#mkc"); c.width=mk.img.naturalWidth; c.height=mk.img.naturalHeight; drawMk();
+  const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
+  c.onpointerdown=e=>{e.preventDefault();c.setPointerCapture(e.pointerId);const p=pt(e);mk.cur={t:mk.tool,c:mk.color,w:Math.max(3,c.width*.008),p:[p,p]};drawMk()};
+  c.onpointermove=e=>{if(!mk.cur)return;const p=pt(e);if(mk.cur.t==="pen")mk.cur.p.push(p);else mk.cur.p[1]=p;drawMk()};
+  c.onpointerup=c.onpointercancel=()=>{if(mk.cur){mk.shapes.push(mk.cur);mk.cur=null;drawMk()}};
+}
+function drawShape(g,s){
+  g.strokeStyle=s.c;g.fillStyle=s.c;g.lineWidth=s.w;g.lineCap="round";g.lineJoin="round";
+  const[x0,y0]=s.p[0],[x1,y1]=s.p[s.p.length-1];
+  g.beginPath();
+  if(s.t==="pen"){g.moveTo(x0,y0);s.p.forEach(p=>g.lineTo(p[0],p[1]));g.stroke()}
+  else if(s.t==="ellipse"){g.ellipse((x0+x1)/2,(y0+y1)/2,Math.abs(x1-x0)/2+1,Math.abs(y1-y0)/2+1,0,0,Math.PI*2);g.stroke()}
+  else{g.moveTo(x0,y0);g.lineTo(x1,y1);g.stroke();const a=Math.atan2(y1-y0,x1-x0),h=s.w*5;
+    g.beginPath();g.moveTo(x1,y1);g.lineTo(x1-h*Math.cos(a-.45),y1-h*Math.sin(a-.45));g.lineTo(x1-h*Math.cos(a+.45),y1-h*Math.sin(a+.45));g.closePath();g.fill()}
+}
+function drawMk(){const c=$("#mkc");if(!c||!mk.img)return;const g=c.getContext("2d");g.drawImage(mk.img,0,0);mk.shapes.forEach(s=>drawShape(g,s));if(mk.cur)drawShape(g,mk.cur)}
+function closeMarkup(){$("#mk").hidden=true;$("#mk").innerHTML="";mk.img=null}
+async function saveMarkup(){
+  if(!mk.shapes.length){closeMarkup();return}
+  const btn=$("#mkSave");btn.disabled=true;btn.textContent="Saving…";
+  try{const b=await new Promise(r=>$("#mkc").toBlob(r,"image/jpeg",.88));const id=await putPhoto(b);
+    const old=draft.photos[mk.k];draft.photos[mk.k]=id;draft._added.push(id);
+    if(draft._added.includes(old)){draft._added=draft._added.filter(x=>x!==old);await delPhoto(old)}else draft._removed.push(old);
+    closeMarkup();renderPhotos();
+  }catch(e){btn.disabled=false;btn.textContent="Done";toast("Couldn't save the marked-up photo.")}
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-mk]");if(!b)return;const a=b.dataset.mk;
+  if(a==="cancel")closeMarkup();
+  else if(a==="tool"){mk.tool=b.dataset.v;document.querySelectorAll('[data-mk="tool"]').forEach(x=>x.classList.toggle("on",x===b))}
+  else if(a==="color"){mk.color=b.dataset.v;document.querySelectorAll('[data-mk="color"]').forEach(x=>x.classList.toggle("on",x===b))}
+  else if(a==="undo"){mk.shapes.pop();drawMk()}
+  else if(a==="main"){const [p]=draft.photos.splice(mk.k,1);draft.photos.unshift(p);mk.k=0;b.remove();renderPhotos();toast("Set as main photo")}
+  else if(a==="save")saveMarkup();
+});
+
+/* ---------- project editor ---------- */
+const PF=[["name","Project name","e.g. GVX04_Colo2_Door punch list"],["jobRef","Job reference","e.g. Door inspection"],["client","Client",""],["address","Address","e.g. Gävle, Sweden"],
+  ["auditorCompany","Auditor company",""],["auditorName","Auditor name",""],["defaultAssignee","Default assignee","e.g. Dvs"],["footer","Report footer text","Optional"]];
+const sig={strokes:[],cur:null,dirty:false,cleared:false};
+function openProject(id){
+  const ex=id?projects.find(p=>p.id===id):null;
+  const last=projects.slice().sort((a,b)=>(b.startDate||"").localeCompare(a.startDate||""))[0]||{};
+  pdraft=ex?{...ex}:{id:uid(),_new:true,name:"",jobRef:"",client:last.client||"",address:last.address||"",auditorCompany:last.auditorCompany||"",auditorName:last.auditorName||"",defaultAssignee:last.defaultAssignee||"",footer:last.footer||"",startDate:today(),endDate:today(),signatureId:""};
+  sig.strokes=[];sig.cur=null;sig.dirty=false;sig.cleared=false;
+  openSheet(`<div class="sh-head"><h3>${ex?"Project details":"New project"}</h3><button class="btn" data-act="closeSheet">Close</button></div>
+  <div class="sh-body">
+    <div class="g2">${PF.map(([k,l,ph])=>`<label class="f" ${k==="name"?'style="grid-column:1/-1"':""}><span>${l}</span><input id="p-${k}" class="${k==="name"?"mono":""}" value="${esc(pdraft[k])}" placeholder="${esc(ph)}"></label>`).join("")}
+      <label class="f"><span>Start date</span><input type="date" id="p-startDate" value="${esc(pdraft.startDate)}"></label>
+      <label class="f"><span>End date</span><input type="date" id="p-endDate" value="${esc(pdraft.endDate)}"></label></div>
+    <div class="f"><span class="lbl">Auditor signature</span><canvas class="sig" id="sigc"></canvas>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn" data-act="sigClear">Clear</button><p class="hint">Sign with your finger. It goes on the report cover.</p></div></div>
+  </div>
+  <div class="sh-foot">${ex?`<button class="btn danger" data-act="delProject">Delete project</button>`:""}<span class="sp"></span>
+    <button class="btn" data-act="closeSheet">Cancel</button><button class="btn primary" data-act="saveProject" id="saveProject">${ex?"Save":"Create project"}</button></div>`);
+  setupSig(ex&&ex.signatureId);
+}
+async function setupSig(existing){
+  const c=$("#sigc"); const r=c.getBoundingClientRect(); c.width=Math.round(r.width*2)||600; c.height=Math.round(r.height*2)||280;
+  let bg=null; if(existing){try{bg=await loadImg(await photoURL(existing))}catch(e){}}
+  const draw=()=>{const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
+    if(bg&&!sig.cleared){const s=Math.min(c.width/bg.width,c.height/bg.height);g.drawImage(bg,0,0,bg.width*s,bg.height*s)}
+    g.strokeStyle="#111";g.lineWidth=4;g.lineCap="round";g.lineJoin="round";
+    [...sig.strokes,...(sig.cur?[sig.cur]:[])].forEach(s=>{g.beginPath();g.moveTo(s[0][0],s[0][1]);s.forEach(p=>g.lineTo(p[0],p[1]));g.stroke()})};
+  sig.draw=draw; draw();
+  const pt=e=>{const b=c.getBoundingClientRect();return[(e.clientX-b.left)*c.width/b.width,(e.clientY-b.top)*c.height/b.height]};
+  c.onpointerdown=e=>{e.preventDefault();c.setPointerCapture(e.pointerId);sig.cur=[pt(e)];draw()};
+  c.onpointermove=e=>{if(sig.cur){sig.cur.push(pt(e));draw()}};
+  c.onpointerup=c.onpointercancel=()=>{if(sig.cur){sig.strokes.push(sig.cur);sig.cur=null;sig.dirty=true;draw()}};
+}
+async function saveProject(){
+  PF.forEach(([k])=>pdraft[k]=$("#p-"+k).value.trim()); pdraft.startDate=$("#p-startDate").value; pdraft.endDate=$("#p-endDate").value;
+  if(!pdraft.name){toast("Give the project a name.");$("#p-name").focus();return}
+  try{
+    const old=pdraft.signatureId;
+    if(sig.dirty){const b=await new Promise(r=>$("#sigc").toBlob(r,"image/png"));pdraft.signatureId=await putPhoto(b)}
+    else if(sig.cleared) pdraft.signatureId="";
+    const {_new,...body}=pdraft; if(_new)body.createdAt=localISO();
+    await saveProject_(body);
+    if(old&&old!==body.signatureId)await delPhoto(old);
+    if(_new){view={name:"project",id:body.id};store.set("pl:last",body.id)}
+    closeSheet();render();toast(_new?"Project created":"Project saved");
+  }catch(e){toast("Couldn't save. Try again.")}
+}
+async function deleteProject(btn){
+  const pid=pdraft.id, list=projIssues(pid);
+  if(!btn.classList.contains("armed")){btn.classList.add("armed");btn.textContent=`Delete project and ${list.length} issues?`;return}
+  btn.disabled=true;btn.textContent="Deleting…";
+  try{for(const i of list){await delIssue_(i.id);for(const a of i.photos||[])await delPhoto(a)}
+    await delPhoto(pdraft.signatureId);await delProject_(pid);closeSheet();view={name:"home"};render();toast("Project deleted")}
+  catch(e){btn.disabled=false;toast("Couldn't finish deleting. Try again.")}
+}
+
+/* ---------- sending files out ---------- */
+function canShareFile(f){try{return !!(navigator.canShare&&navigator.canShare({files:[f]}))}catch(e){return false}}
+async function shareFile(f){
+  try{await navigator.share({files:[f],title:f.name});return true}
+  catch(e){if(e&&e.name==="AbortError")return false;toast("Sharing didn't work here. Use Save instead.");return false}
+}
+function saveFile(f){
+  const a=document.createElement("a");a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},8000);
+  if(isIOS&&standalone())toast("If nothing appears, use Share and pick “Save to Files”.",4000);
+}
+function readyBlock(f,label){
+  built=f;const kb=f.size>1048576?(f.size/1048576).toFixed(1)+" MB":Math.round(f.size/1024)+" KB";
+  $("#r-ready").innerHTML=`<div class="note"><b>${esc(label)} ready</b> · ${esc(f.name)} · ${kb}</div>
+    <div class="ready">${canShareFile(f)?`<button class="btn primary block" data-act="shareBuilt">Share / send (email, Teams, WhatsApp…)</button>`:""}
+    <button class="btn block" data-act="saveBuilt">Save to phone</button></div>`;
+  $("#r-ready").hidden=false;
+}
+
+/* ---------- report ---------- */
+function openReport(){
+  const p=projects.find(x=>x.id===view.id); const c=counts(projIssues(p.id));
+  openSheet(`<div class="sh-head"><h3>Report &amp; backup</h3><button class="btn" data-act="closeSheet">Close</button></div>
+  <div class="sh-body">
+    <div class="note">${c.total} issues · ${c.Open} open · ${c.Fixed} fixed · ${c.Closed} closed</div>
+    <div class="f"><span class="lbl">Include</span>${segHTML("r-scope",["All issues","Not closed","Closed only"],"All issues")}</div>
+    <label class="f"><span>File name</span><input id="r-name" value="${esc(fileBase(p))}"></label>
+    <div class="g2"><button class="btn primary" data-act="pdf" id="pdfBtn">Make PDF report</button><button class="btn" data-act="csv">Make spreadsheet (CSV)</button></div>
+    <p class="hint" id="r-status">The PDF has a cover with your signature, project details, a summary and every issue with photos and comments.</p>
+    <div id="r-ready" class="ready" hidden></div>
+    <div class="f" style="margin-top:8px"><span class="lbl">Backup</span>
+      <button class="btn" data-act="backup">Make backup file of this project</button>
+      <p class="hint">Keeps a full copy with photos. Open it on another phone or computer with “Import backup file” on the home screen.</p></div>
+  </div>`);
+}
+const fileBase=p=>(p.name||"report").replace(/[^\w\-. ]+/g,"_").replace(/\s+/g,"_").replace(/_+$/,"")+"_"+fmtD(today());
+function scoped(p){const s=radioVal("r-scope");const l=projIssues(p.id);return s==="Not closed"?l.filter(i=>i.status!=="Closed"):s==="Closed only"?l.filter(i=>i.status==="Closed"):l}
+function exportCSV(){
+  const p=projects.find(x=>x.id===view.id);const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const rows=[["Reference","Door / item","Location","Status","Priority","Assign to","Date raised","Fix by","Closed","Description","Comments","Photos"]];
+  scoped(p).forEach(i=>rows.push([`Issue #${i.num}`,i.title,i.location,i.status,i.priority,i.assignTo,fmtD(i.dateRaised),fmtD(i.fixBy),i.closedAt?fmtDT(i.closedAt):"",i.description,
+    (i.comments||[]).slice().sort(byTime).map(c=>`${fmtDT(c.at)}: ${c.text}`).join(" | "),(i.photos||[]).length]));
+  const f=new File(["﻿"+rows.map(r=>r.map(q).join(";")).join("\r\n")],($("#r-name").value.trim()||fileBase(p))+".csv",{type:"text/csv"});
+  readyBlock(f,"Spreadsheet");
+}
+async function toDataURL(id,max){
+  try{const im=await loadImg(await photoURL(id));const s=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight));
+    const c=document.createElement("canvas");c.width=Math.round(im.naturalWidth*s);c.height=Math.round(im.naturalHeight*s);
+    const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
+    const out={u:c.toDataURL("image/jpeg",.82),w:c.width,h:c.height};c.width=c.height=0;return out}catch(e){return null}
+}
+async function exportPDF(){
+  const p=projects.find(x=>x.id===view.id), list=scoped(p), st=$("#r-status"), btn=$("#pdfBtn");
+  if(!window.jspdf){toast("The PDF tool didn't load. Reopen the app and try again.");return}
+  btn.disabled=true;$("#r-ready").hidden=true;
+  try{
+    const imgs={};let n=0;const tot=list.reduce((a,i)=>a+(i.photos||[]).length,0);
+    for(const i of list)for(const [k,id] of (i.photos||[]).entries()){if(k>6)break;st.textContent=`Preparing photos ${++n} of ${tot}…`;imgs[id]=await toDataURL(id,k===0?700:360)}
+    const sigImg=p.signatureId?await toDataURL(p.signatureId,500):null;
+    st.textContent="Building PDF…";
+    const doc=new window.jspdf.jsPDF({unit:"mm",format:"a4",compress:true});const W=210,H=297,M=15;
+    const NAVY=[22,32,43],YEL=[242,183,5],GREY=[90,101,115],LINE=[205,211,218];
+    const c=counts(list);
+    doc.setFont("helvetica","bold");doc.setFontSize(24);doc.setTextColor(...NAVY);
+    const tl=doc.splitTextToSize(p.name,W-2*M);doc.text(tl,M,58-(tl.length-1)*9);
+    doc.setFillColor(...NAVY);doc.rect(M,68,W-2*M,58,"F");doc.setFillColor(...YEL);doc.rect(M,126,W-2*M,2.2,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(14);doc.setFont("helvetica","normal");doc.text(p.jobRef||"Inspection report",M+7,80);
+    doc.setFontSize(13);[p.auditorName,p.auditorCompany,fmtD(p.startDate)].filter(Boolean).forEach((t,k)=>doc.text(t,W-M-7,98+k*8,{align:"right"}));
+    if(sigImg){const h=22,w=Math.min(70,h*sigImg.w/sigImg.h);doc.addImage(sigImg.u,"JPEG",M,240,w,h);doc.setDrawColor(...LINE);doc.line(M,264,M+70,264);
+      doc.setTextColor(...GREY);doc.setFontSize(9);doc.text(p.auditorName||"Auditor",M,269)}
+    const section=(t,y)=>{doc.setFillColor(...NAVY);doc.rect(M,y,W-2*M,10,"F");doc.setFillColor(...YEL);doc.rect(M,y+10,W-2*M,.8,"F");doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(13);doc.text(t,M+4,y+7)};
+    doc.addPage();section("Project",20);
+    const kv=[["Project",p.name],["Job reference",p.jobRef],["Address",p.address],["Start date",fmtD(p.startDate)],["End date",fmtD(p.endDate)],["Client",p.client],["Auditor company",p.auditorCompany],["Auditor name",p.auditorName],["Total issues",String(c.total)]];
+    let y=42;doc.setFontSize(11);kv.forEach(([k,v])=>{doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text(k+":",M+3,y);doc.setTextColor(...NAVY);const l=doc.splitTextToSize(v||"-",W-2*M-55);doc.text(l,M+55,y);y+=8*l.length});
+    doc.addPage();section("Summary",20);
+    const tiles=[[c.total,"Issues"],[c.Open,"Open"],[c.Fixed,"Fixed"],[c.Closed,"Closed"],[c.pct+"%","Complete"]];const tw=(W-2*M-8)/5;
+    tiles.forEach(([v,l],k)=>{const x=M+k*(tw+2);doc.setFillColor(...NAVY);doc.rect(x,38,tw,24,"F");doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(20);doc.text(String(v),x+tw/2,51,{align:"center"});doc.setFont("helvetica","normal");doc.setFontSize(9);doc.text(l,x+tw/2,58,{align:"center"})});
+    const bars=(title,rows,y0)=>{doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(13);doc.text(title,M,y0);const mx=Math.max(1,...rows.map(r=>r[1]));
+      rows.forEach(([l,v,col],k)=>{const yy=y0+8+k*13;doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...GREY);doc.text(l,M,yy+5.5);doc.setFillColor(236,239,242);doc.rect(M+28,yy,W-2*M-48,8,"F");
+        if(v){doc.setFillColor(...col);doc.rect(M+28,yy,(W-2*M-48)*v/mx,8,"F")}doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.text(String(v),W-M,yy+5.5,{align:"right"})})};
+    bars("Status",[["Open",c.Open,[201,88,10]],["Fixed",c.Fixed,[45,100,190]],["Closed",c.Closed,[37,122,76]]],80);
+    const pc={Low:0,Medium:0,High:0};list.forEach(i=>pc[i.priority||"Medium"]++);
+    bars("Priority",[["High",pc.High,[184,50,28]],["Medium",pc.Medium,[242,183,5]],["Low",pc.Low,[120,130,140]]],140);
+    doc.addPage();section("Issues",20);y=36;
+    const LX=M+66,VX=LX+26,VW=W-M-VX,LH=4.6;
+    for(const i of list){
+      const rows=[["Issue",i.title,true],["Reference",`Issue #${i.num}`],i.location&&["Location",i.location],["Date raised",fmtD(i.dateRaised)],i.assignTo&&["Assign to",i.assignTo],["Status",i.status],["Priority",i.priority],i.fixBy&&["Fix by date",fmtD(i.fixBy)],i.status==="Closed"&&i.closedAt&&["Closed",fmtDT(i.closedAt)],i.description&&["Description",i.description]].filter(Boolean);
+      doc.setFontSize(10);
+      const lines=rows.map(r=>doc.splitTextToSize(String(r[1]||""),VW));
+      const cms=(i.comments||[]).slice().sort(byTime).map(cm=>[fmtDT(cm.at),doc.splitTextToSize(cm.text,VW)]);
+      const th=lines.reduce((a,l)=>a+l.length*LH+1.2,0)+cms.reduce((a,[,l])=>a+(l.length+1)*LH+2,0)+2;
+      const ph=(i.photos||[]);const bh=Math.max(th,ph.length?60:20);
+      if(y+Math.min(bh,H-60)>H-18){doc.addPage();y=20}
+      if(ph[0]&&imgs[ph[0]]){const im=imgs[ph[0]];const w=45,h=Math.min(60,w*im.h/im.w);doc.addImage(im.u,"JPEG",M,y,w,h)}
+      ph.slice(1,7).forEach((id,k)=>{const im=imgs[id];if(!im)return;const col=k>=3?1:0,row=k%3;const w=8.5,h=Math.min(19,w*im.h/im.w);doc.addImage(im.u,"JPEG",M+47+col*9.5,y+row*20,w,h)});
+      let ty=y+3.5;
+      rows.forEach((r,k)=>{doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text(r[0]+":",LX,ty);doc.setTextColor(...NAVY);doc.setFont("helvetica",r[2]?"bold":"normal");doc.text(lines[k],VX,ty);ty+=lines[k].length*LH+1.2});
+      if(cms.length){doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text("Comments:",LX,ty);
+        cms.forEach(([t,l])=>{if(ty>H-22){doc.addPage();ty=24}doc.setTextColor(...GREY);doc.setFontSize(9);doc.text(t,VX,ty);ty+=LH;doc.setFontSize(10);doc.setTextColor(...NAVY);doc.text(l,VX,ty);ty+=l.length*LH+2})}
+      const endY=Math.max(ty,y+(ph.length?61:18));doc.setDrawColor(...LINE);doc.line(M,endY,W-M,endY);y=endY+5;
+    }
+    const np=doc.getNumberOfPages();
+    for(let k=2;k<=np;k++){doc.setPage(k);doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(...GREY);
+      doc.text(p.name,W/2,10,{align:"center",maxWidth:120});doc.text(fmtD(p.startDate||today()),W-M,10,{align:"right"});
+      doc.text(p.footer||p.auditorCompany||"",W/2,H-8,{align:"center"});doc.text(`Page ${k} of ${np}`,W-M,H-8,{align:"right"})}
+    st.textContent=`${np} pages, ${list.length} issues.`;
+    readyBlock(new File([doc.output("blob")],($("#r-name").value.trim()||fileBase(p))+".pdf",{type:"application/pdf"}),"PDF report");
+  }catch(e){console.error(e);st.textContent="Something went wrong building the PDF. Try again, or make the spreadsheet."}
+  finally{btn.disabled=false}
+}
+
+/* ---------- backup / import ---------- */
+function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)}
+function unb64(str){const s=atob(str);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer}
+async function makeBackup(){
+  const p=projects.find(x=>x.id===view.id), list=projIssues(p.id), st=$("#r-status");
+  const ids=[...new Set([p.signatureId,...list.flatMap(i=>i.photos||[])].filter(Boolean))];
+  const parts=[`{"app":"site-punch-list","version":1,"exported":${JSON.stringify(localISO())},"projects":${JSON.stringify([p])},"issues":${JSON.stringify(list)},"photos":{`];
+  let n=0;
+  for(const id of ids){const r=await DB.get("photos",id);if(!r)continue;st.textContent=`Packing photos ${++n} of ${ids.length}…`;
+    parts.push(`${n>1?",":""}${JSON.stringify(id)}:{"type":${JSON.stringify(r.type)},"data":"${b64(r.data)}"}`)}
+  parts.push("}}");st.textContent=`Backup has ${list.length} issues and ${n} photos.`;
+  readyBlock(new File(parts,`${fileBase(p)}_backup.json`,{type:"application/json"}),"Backup");
+}
+async function importBackup(file){
+  try{
+    toast("Importing…",60000);
+    const d=JSON.parse(await file.text());
+    if(d.app!=="site-punch-list"||!Array.isArray(d.projects))throw new Error("format");
+    let np=0;for(const [id,ph] of Object.entries(d.photos||{})){await DB.put("photos",{id,type:ph.type||"image/jpeg",data:unb64(ph.data)});np++}
+    for(const i of d.issues||[])await saveIssue_(i);
+    for(const p of d.projects)await saveProject_(p);
+    render();toast(`Imported ${d.projects.map(p=>p.name).join(", ")}: ${(d.issues||[]).length} issues, ${np} photos`,5000);
+  }catch(e){toast(e&&e.name==="QuotaExceededError"?"Not enough storage space on this phone.":"That file isn't a Site Punch List backup.",5000)}
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]");if(!b)return;const a=b.dataset.act;
+  if(a==="rmPhoto"){e.stopPropagation();e.preventDefault();const k=+b.dataset.k;const id=draft.photos.splice(k,1)[0];
+    if(draft._added.includes(id)){draft._added=draft._added.filter(x=>x!==id);delPhoto(id)}else draft._removed.push(id);renderPhotos();return}
+  switch(a){
+    case "home":view={name:"home"};query="";filter="all";store.set("pl:last","");render();scrollTo(0,0);break;
+    case "open":view={name:"project",id:b.dataset.id};store.set("pl:last",b.dataset.id);render();scrollTo(0,0);break;
+    case "newProject":openProject(null);break;
+    case "editProject":openProject(view.id);break;
+    case "saveProject":saveProject();break;
+    case "delProject":deleteProject(b);break;
+    case "sigClear":sig.strokes=[];sig.cleared=true;sig.dirty=false;sig.draw&&sig.draw();break;
+    case "closeSheet":closeSheet();break;
+    case "newIssue":openIssue(null);break;
+    case "issue":openIssue(b.dataset.id);break;
+    case "saveIssue":saveIssue();break;
+    case "cancelIssue":cancelIssue();break;
+    case "delIssue":deleteIssue(b);break;
+    case "markup":openMarkup(+b.dataset.k);break;
+    case "addComment":{const t=$("#i-cm");const v=t.value.trim();if(!v){t.focus();break}draft.comments.push({at:localISO(),text:v});t.value="";renderComments();break}
+    case "rmComment":draft.comments.splice(+b.dataset.k,1);renderComments();break;
+    case "report":openReport();break;
+    case "pdf":exportPDF();break;
+    case "csv":exportCSV();break;
+    case "backup":makeBackup();break;
+    case "shareBuilt":if(built)shareFile(built);break;
+    case "saveBuilt":if(built)saveFile(built);break;
+    case "import":$("#importIn").click();break;
+    case "install":if(installEvt){installEvt.prompt();installEvt=null;render()}break;
+    case "hideInstall":store.set("pl:hideInstall","1");render();break;
+  }
+});
+document.addEventListener("change",e=>{
+  if(e.target.name==="flt"){filter=e.target.value;render()}
+  if(e.target.id==="camIn"||e.target.id==="fileIn"){const f=[...e.target.files];e.target.value="";addFiles(f)}
+  if(e.target.id==="importIn"){const f=e.target.files[0];e.target.value="";if(f)importBackup(f)}
+});
+document.addEventListener("input",e=>{if(e.target.id==="search"){query=e.target.value;const pos=e.target.selectionStart;render();const s=$("#search");s.focus();try{s.setSelectionRange(pos,pos)}catch(_){}}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(!$("#mk").hidden)closeMarkup();else if(!$("#sheet").hidden){draft?cancelIssue():closeSheet()}}});
+$("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet"){draft?cancelIssue():closeSheet()}});
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;if(view.name==="home")render()});
+
+/* ---------- boot ---------- */
+(async function(){
+  render();
+  try{
+    await DB.open();
+    [projects,issues]=await Promise.all([DB.all("projects"),DB.all("issues")]);
+    ready=true;
+    const lastId=store.get("pl:last");if(lastId&&projects.some(p=>p.id===lastId))view={name:"project",id:lastId};
+  }catch(e){dbError="This browser blocked on-device storage.";}
+  render();
+  try{if(navigator.storage&&navigator.storage.persist)await navigator.storage.persist()}catch(e){}
+  if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
+})();
+</script>
+</body>
+</html>
