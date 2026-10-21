@@ -159,6 +159,34 @@ main{padding-block:18px calc(120px + env(safe-area-inset-bottom,0px))}
 .mk-stage{flex:1;min-height:0;display:grid;place-items:center;padding:8px}
 .mk-stage canvas{max-width:100%;max-height:100%;touch-action:none;background:#222}
 .grow{flex:1}
+/* floor plans & pins */
+.plan-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.plan-bar b{font-family:var(--mono)}
+.zbtn{min-width:44px;font-size:1.2rem;padding:6px 10px}
+.plan-scroll{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:var(--r);background:#fff;max-height:70vh}
+.plan-wrap{position:relative;background:#fff center/100% 100% no-repeat;cursor:crosshair;max-width:none}
+.pin{position:absolute;transform:translate(-50%,-100%);width:28px;height:37px;padding:0;border:0;background:none;cursor:pointer;--pc:var(--open)}
+.pin.Fixed{--pc:var(--fixed)} .pin.Closed{--pc:var(--closed)}
+.pin i{position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--pc);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+.pin::after{content:"";position:absolute;left:50%;bottom:0;transform:translateX(-50%);border-style:solid;border-width:10px 6px 0;border-color:var(--pc) transparent transparent}
+.pin b{position:absolute;left:0;top:0;width:28px;line-height:28px;text-align:center;color:#fff;font:700 11px/28px var(--body);font-variant-numeric:tabular-nums}
+.pin.dim{opacity:.4}
+.pin.cur i{box-shadow:0 0 0 3px #F5C12E,0 1px 3px rgba(0,0,0,.45)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.85rem;color:var(--muted);margin-top:8px;align-items:center}
+.legend .lg::before{content:"";display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px;background:var(--c)}
+.plans-edit{display:grid;gap:8px}
+.plan-row{display:flex;gap:10px;align-items:center}
+.plan-row .pt{flex:0 0 76px;height:56px;border-radius:6px;border:1px solid var(--line);background:#fff center/contain no-repeat}
+.plan-row input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px 11px}
+.addbtn{position:relative;overflow:hidden}
+.addbtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.pinrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pinrow .where{font-weight:600}
+.pk{position:fixed;inset:0;z-index:30;background:#0B0F13;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.pk-hint{color:#C9D1D9;font-size:.9rem;padding-bottom:6px}
+.pk-stage{flex:1;min-height:0;display:flex;padding:0 8px 8px}
+.pk .plan-scroll{flex:1;max-height:none}
+.pk .pin{pointer-events:none}
 @media (max-width:520px){.tiles{grid-template-columns:repeat(5,minmax(0,1fr))}.tile b{font-size:1.4rem}.tile span{font-size:.6rem;letter-spacing:.04em}}
 </style>
 </head>
@@ -171,6 +199,7 @@ main{padding-block:18px calc(120px + env(safe-area-inset-bottom,0px))}
 <div id="fabSlot"></div>
 <div class="sheet-wrap" id="sheet" hidden><div class="sheet" role="dialog" aria-modal="true" id="sheetBox"></div></div>
 <div class="mk" id="mk" hidden></div>
+<div class="pk" id="pk" hidden></div>
 <div class="toast" id="toast" hidden></div>
 <input type="file" id="importIn" accept=".json,application/json" hidden>
 
@@ -180,6 +209,7 @@ main{padding-block:18px calc(120px + env(safe-area-inset-bottom,0px))}
 const STATUSES=["Open","Fixed","Closed"], PRIORITIES=["Low","Medium","High"];
 let projects=[], issues=[], ready=false, dbError="";
 let view={name:"home"}, filter="all", query="";
+let pmode="list", planSel=null, zoom=1;
 let draft=null, pdraft=null, built=null, installEvt=null;
 
 const $=s=>document.querySelector(s);
@@ -285,29 +315,109 @@ function projectView(p){
     <div class="tile f"><b>${c.Fixed}</b><span>Fixed</span></div>
     <div class="tile c"><b>${c.Closed}</b><span>Closed</span></div>
     <div class="tile"><b>${c.pct}%</b><span>Done</span></div></div>
-  <div class="tools"><div class="seg" role="radiogroup" aria-label="Filter by status">${segs.map(([v,l])=>`<label><input type="radio" name="flt" id="flt-${v}" value="${v}" ${filter===v?"checked":""}><span>${l}</span></label>`).join("")}</div>
+  <div class="tools"><div class="seg" role="radiogroup" aria-label="View">${[["list","List"],["plan","Plan"]].map(([v,l])=>`<label><input type="radio" name="pmode" id="pmode-${v}" value="${v}" ${pmode===v?"checked":""}><span>${l}</span></label>`).join("")}</div>
+    <div class="seg" role="radiogroup" aria-label="Filter by status">${segs.map(([v,l])=>`<label><input type="radio" name="flt" id="flt-${v}" value="${v}" ${filter===v?"checked":""}><span>${l}</span></label>`).join("")}</div>
     <input class="search" id="search" type="search" placeholder="Search door, location, comment…" value="${esc(query)}"></div>
-  ${!all.length?`<div class="empty"><b>No issues logged</b>Tap “+ New issue” at each door: take a photo, mark it up, add a comment.</div>`:
+  ${pmode==="plan"?planView(p,list):!all.length?`<div class="empty"><b>No issues logged</b>Tap “+ New issue” at each door: take a photo, mark it up, add a comment.</div>`:
     !list.length?`<div class="empty"><b>Nothing matches</b>Try another filter or search.</div>`:
   `<div class="ilist">${list.map(i=>`<button class="icard" data-act="issue" data-id="${i.id}">
      <div class="thumb" data-pid="${(i.photos||[])[0]||""}">${(i.photos||[]).length>1?`<span class="n">${i.photos.length}</span>`:""}</div>
      <div class="body"><div class="idl"><span class="door">${esc(i.title)}</span><span class="ref">Issue #${i.num}${i.location?` · ${esc(i.location)}`:""}</span></div>
      <div class="last">${esc(latest(i))||'<span class="muted">No comments</span>'}</div>
-     <div class="chips"><span class="pill ${i.status}">${i.status}</span><span class="chip ${i.priority}">${i.priority}</span>${i.assignTo?`<span class="chip">${esc(i.assignTo)}</span>`:""}${i.fixBy?`<span class="chip ${isLate(i)?"late":""}">Fix by ${fmtD(i.fixBy)}</span>`:""}</div></div></button>`).join("")}</div>`}`;
+     <div class="chips"><span class="pill ${i.status}">${i.status}</span><span class="chip ${i.priority}">${i.priority}</span>${i.assignTo?`<span class="chip">${esc(i.assignTo)}</span>`:""}${i.fixBy?`<span class="chip ${isLate(i)?"late":""}">Fix by ${fmtD(i.fixBy)}</span>`:""}${i.pin&&planById(p,i.pin.planId)?`<span class="chip">📍 ${esc(planById(p,i.pin.planId).name)}</span>`:""}</div></div></button>`).join("")}</div>`}`;
 }
+
+/* ---------- floor plans ---------- */
+const plansOf=p=>(p&&p.plans)||[];
+const planById=(p,id)=>plansOf(p).find(x=>x.id===id);
+const ZL=[1,1.5,2,3,4,6];
+const zstep=d=>ZL[Math.max(0,Math.min(ZL.length-1,(ZL.indexOf(zoom)<0?0:ZL.indexOf(zoom))+d))];
+function planHTML(pl,pins,scrollId,{curId=null,dim=false}={}){
+  return `<div class="plan-scroll" id="${scrollId}"><div class="plan-wrap" data-plan="${pl.id}" data-pid="${pl.photoId}" style="width:${zoom*100}%;aspect-ratio:${pl.w}/${pl.h}">
+    ${pins.map(i=>`<button class="pin ${i.status} ${dim&&i.id!==curId?"dim":""} ${i.id===curId?"cur":""}" ${dim?"":`data-act="pinIssue" data-id="${i.id}"`} style="left:${(i.pin.x*100).toFixed(3)}%;top:${(i.pin.y*100).toFixed(3)}%" aria-label="Issue #${i.num} ${esc(i.title||"")}"><i></i><b>${esc(String(i.num))}</b></button>`).join("")}
+  </div></div>`;
+}
+function planView(p,list){
+  const pls=plansOf(p);
+  if(!pls.length) return `<div class="empty"><b>No floor plans yet</b>Add a screenshot of each Colo layout under Details, then pin issues on it.<br><br><button class="btn primary" data-act="editProject">Add floor plan</button></div>`;
+  if(!planById(p,planSel)) planSel=pls[0].id;
+  const pl=planById(p,planSel);
+  const pins=list.filter(i=>i.pin&&i.pin.planId===pl.id).sort((a,b)=>a.num-b.num);
+  const unpinned=list.filter(i=>!i.pin||!planById(p,i.pin.planId)).length;
+  return `<div class="plan-bar">${pls.length>1?`<div class="seg" role="radiogroup" aria-label="Floor plan">${pls.map(x=>`<label><input type="radio" name="plansel" value="${x.id}" ${x.id===pl.id?"checked":""}><span>${esc(x.name)}</span></label>`).join("")}</div>`:`<b>${esc(pl.name)}</b>`}
+      <span class="grow"></span><button class="btn zbtn" data-act="zoomOut" aria-label="Zoom out">−</button><button class="btn zbtn" data-act="zoomIn" aria-label="Zoom in">+</button></div>
+    ${planHTML(pl,pins,"planScroll")}
+    <div class="legend"><span class="lg" style="--c:var(--open)">Open</span><span class="lg" style="--c:var(--fixed)">Fixed</span><span class="lg" style="--c:var(--closed)">Closed</span>
+      <span>${pins.length} on this plan${unpinned?` · ${unpinned} not pinned`:""}</span></div>
+    <p class="hint">Tap a pin to open the issue. Tap an empty spot on the plan to log a new issue there.</p>`;
+}
+function zoomTo(nz,scrollId,rerender){
+  const sc=document.getElementById(scrollId);let cx=.5,cy=.5;
+  if(sc&&sc.scrollWidth){cx=(sc.scrollLeft+sc.clientWidth/2)/sc.scrollWidth;cy=(sc.scrollTop+sc.clientHeight/2)/sc.scrollHeight}
+  zoom=nz;rerender();
+  const s2=document.getElementById(scrollId);if(s2){s2.scrollLeft=cx*s2.scrollWidth-s2.clientWidth/2;s2.scrollTop=cy*s2.scrollHeight-s2.clientHeight/2}
+}
+function planPoint(wrap,e){const r=wrap.getBoundingClientRect();return{planId:wrap.dataset.plan,x:Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),y:Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))}}
+
+/* pin picker (full screen) */
+const pk={planId:null,pin:null};
+function openPicker(){
+  readIssueForm();
+  const p=projects.find(x=>x.id===draft.projectId);const pls=plansOf(p);if(!pls.length)return;
+  pk.pin=draft.pin&&planById(p,draft.pin.planId)?{...draft.pin}:null;
+  pk.planId=(pk.pin&&pk.pin.planId)||(planById(p,planSel)&&planSel)||pls[0].id;
+  $("#pk").hidden=false;renderPicker();
+}
+function renderPicker(){
+  const p=projects.find(x=>x.id===draft.projectId);const pls=plansOf(p);const pl=planById(p,pk.planId);
+  const old=$("#pkScroll");const keep=old?[old.scrollLeft,old.scrollTop]:null;
+  const others=projIssues(p.id).filter(i=>i.id!==draft.id&&i.pin&&i.pin.planId===pl.id);
+  const me=pk.pin&&pk.pin.planId===pl.id?[{id:"__cur",num:draft.num||"+",status:radioVal("i-status")||draft.status,title:draft.title,pin:pk.pin}]:[];
+  $("#pk").innerHTML=`<div class="gut mk-bar"><button class="t" data-pk="cancel">Cancel</button>
+      ${pls.length>1?pls.map(x=>`<button class="t ${x.id===pl.id?"on":""}" data-pk="plan" data-v="${x.id}">${esc(x.name)}</button>`).join(""):`<span>${esc(pl.name)}</span>`}
+      <span class="grow"></span><button class="t" data-pk="zout" aria-label="Zoom out">−</button><button class="t" data-pk="zin" aria-label="Zoom in">+</button>
+      <button class="t on" data-pk="done" ${pk.pin?"":"disabled"}>Done</button></div>
+    <div class="pk-hint gut">${pk.pin?"Pin placed. Tap again to move it, then Done.":"Tap the plan where this issue is."} Other issues are shown faded.</div>
+    <div class="pk-stage">${planHTML(pl,[...others,...me],"pkScroll",{curId:"__cur",dim:true})}</div>`;
+  hydrate($("#pk"));
+  if(keep){const s=$("#pkScroll");s.scrollLeft=keep[0];s.scrollTop=keep[1]}
+}
+function closePicker(){$("#pk").hidden=true;$("#pk").innerHTML=""}
+function renderPinInfo(){
+  const el=$("#pin-info");if(!el||!draft)return;
+  const p=projects.find(x=>x.id===draft.projectId);const pls=plansOf(p);
+  if(!pls.length){el.innerHTML=`<p class="hint">No floor plans in this project yet. Add a Colo layout under Details to pin issues on it.</p>`;return}
+  const pl=draft.pin&&planById(p,draft.pin.planId);
+  el.innerHTML=pl?`<div class="pinrow"><span class="where">📍 On ${esc(pl.name)}</span><button class="btn" data-act="pickPin">Move pin</button><button class="btn" data-act="clearPin">Remove pin</button></div>`
+    :`<div class="pinrow"><button class="btn" data-act="pickPin">📍 Place on plan</button><span class="hint">Not pinned yet</span></div>`;
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-pk]");
+  if(b){const a=b.dataset.pk;
+    if(a==="cancel")closePicker();
+    else if(a==="plan"){pk.planId=b.dataset.v;renderPicker()}
+    else if(a==="zin"||a==="zout")zoomTo(zstep(a==="zin"?1:-1),"pkScroll",renderPicker);
+    else if(a==="done"){draft.pin=pk.pin;closePicker();renderPinInfo()}
+    return}
+  const wrap=e.target.closest(".plan-wrap");if(!wrap||e.target.closest(".pin"))return;
+  if(!$("#pk").hidden){pk.pin=planPoint(wrap,e);renderPicker();return}
+  if(view.name==="project"&&$("#sheet").hidden){const pt=planPoint(wrap,e);planSel=pt.planId;openIssue(null,pt)}
+});
 
 /* ---------- sheet helpers ---------- */
 function openSheet(html){$("#sheetBox").innerHTML=html;$("#sheet").hidden=false;document.body.style.overflow="hidden"}
-function closeSheet(){$("#sheet").hidden=true;$("#sheetBox").innerHTML="";document.body.style.overflow="";built=null}
+function closeSheet(){
+  if(pdraft&&!pdraft._saved&&pdraft._planAdded){for(const id of pdraft._planAdded)delPhoto(id)}
+  pdraft=null;$("#sheet").hidden=true;$("#sheetBox").innerHTML="";document.body.style.overflow="";built=null}
 const segHTML=(name,vals,cur)=>`<div class="seg">${vals.map(v=>`<label><input type="radio" name="${name}" id="${name}-${v.replace(/\W/g,"")}" value="${v}" ${cur===v?"checked":""}><span>${v}</span></label>`).join("")}</div>`;
 const radioVal=n=>{const e=document.querySelector(`input[name="${n}"]:checked`);return e?e.value:null};
 
 /* ---------- issue editor ---------- */
-function openIssue(id){
+function openIssue(id,pinPreset){
   const p=projects.find(x=>x.id===view.id); if(!p) return;
   const ex=id?issues.find(i=>i.id===id):null;
   const last=projIssues(p.id).slice(-1)[0];
-  draft=ex?clean(ex):{id:uid(),projectId:p.id,title:"",location:"",status:"Open",priority:"Medium",assignTo:p.defaultAssignee||(last&&last.assignTo)||"",dateRaised:today(),fixBy:"",description:"",photos:[],comments:[]};
+  draft=ex?clean(ex):{id:uid(),projectId:p.id,title:"",location:"",status:"Open",priority:"Medium",assignTo:p.defaultAssignee||(last&&last.assignTo)||"",dateRaised:today(),fixBy:"",description:"",photos:[],comments:[],pin:pinPreset||null};
   draft._new=!ex; draft._added=[]; draft._removed=[]; draft._busy=0;
   const names=[...new Set(issues.map(i=>i.assignTo).filter(Boolean))];
   openSheet(`<div class="sh-head"><h3>${ex?`Issue #${ex.num}`:"New issue"}</h3><button class="btn" data-act="cancelIssue">Close</button></div>
@@ -316,6 +426,7 @@ function openIssue(id){
       <label class="f"><span>Location</span><input id="i-loc" value="${esc(draft.location)}" placeholder="e.g. Corridor L2"></label></div>
     <div class="f"><span class="lbl">Photos</span><div class="ph-grid" id="ph-grid"></div>
       <p class="hint">Tap a photo to circle or arrow the problem. The first photo is the main one in the report.</p></div>
+    <div class="f"><span class="lbl">Location on plan</span><div id="pin-info"></div></div>
     <div class="f"><span class="lbl">Comments</span>
       <div class="cm-add"><label class="f" style="flex:1"><textarea id="i-cm" placeholder="e.g. Drop down seal needs to be activated"></textarea></label><button class="btn primary" data-act="addComment">Add</button></div>
       <div id="cm-list" style="display:grid;gap:8px;margin-top:6px"></div></div>
@@ -328,7 +439,7 @@ function openIssue(id){
   </div>
   <div class="sh-foot">${ex?`<button class="btn danger" data-act="delIssue">Delete</button>`:""}<span class="sp"></span>
     <button class="btn" data-act="cancelIssue">Cancel</button><button class="btn primary" data-act="saveIssue" id="saveIssue">Save issue</button></div>`);
-  renderPhotos(); renderComments();
+  renderPhotos(); renderComments(); renderPinInfo();
 }
 function renderPhotos(){
   const g=$("#ph-grid"); if(!g||!draft) return;
@@ -448,19 +559,51 @@ const sig={strokes:[],cur:null,dirty:false,cleared:false};
 function openProject(id){
   const ex=id?projects.find(p=>p.id===id):null;
   const last=projects.slice().sort((a,b)=>(b.startDate||"").localeCompare(a.startDate||""))[0]||{};
-  pdraft=ex?{...ex}:{id:uid(),_new:true,name:"",jobRef:"",client:last.client||"",address:last.address||"",auditorCompany:last.auditorCompany||"",auditorName:last.auditorName||"",defaultAssignee:last.defaultAssignee||"",footer:last.footer||"",startDate:today(),endDate:today(),signatureId:""};
+  pdraft=ex?{...ex,plans:clean(plansOf(ex))}:{id:uid(),_new:true,name:"",jobRef:"",client:last.client||"",address:last.address||"",auditorCompany:last.auditorCompany||"",auditorName:last.auditorName||"",defaultAssignee:last.defaultAssignee||"",footer:last.footer||"",startDate:today(),endDate:today(),signatureId:"",plans:[]};
+  pdraft._planAdded=[];pdraft._planRemoved=[];pdraft._planBusy=0;
   sig.strokes=[];sig.cur=null;sig.dirty=false;sig.cleared=false;
   openSheet(`<div class="sh-head"><h3>${ex?"Project details":"New project"}</h3><button class="btn" data-act="closeSheet">Close</button></div>
   <div class="sh-body">
     <div class="g2">${PF.map(([k,l,ph])=>`<label class="f" ${k==="name"?'style="grid-column:1/-1"':""}><span>${l}</span><input id="p-${k}" class="${k==="name"?"mono":""}" value="${esc(pdraft[k])}" placeholder="${esc(ph)}"></label>`).join("")}
       <label class="f"><span>Start date</span><input type="date" id="p-startDate" value="${esc(pdraft.startDate)}"></label>
       <label class="f"><span>End date</span><input type="date" id="p-endDate" value="${esc(pdraft.endDate)}"></label></div>
+    <div class="f"><span class="lbl">Floor plans</span><div class="plans-edit" id="plans-edit"></div>
+      <p class="hint">Add a screenshot or photo of each Colo layout, then name it (e.g. Colo 2). Issues are pinned on these and they print at the front of the report.</p></div>
     <div class="f"><span class="lbl">Auditor signature</span><canvas class="sig" id="sigc"></canvas>
       <div style="display:flex;gap:8px;align-items:center"><button class="btn" data-act="sigClear">Clear</button><p class="hint">Sign with your finger. It goes on the report cover.</p></div></div>
   </div>
   <div class="sh-foot">${ex?`<button class="btn danger" data-act="delProject">Delete project</button>`:""}<span class="sp"></span>
     <button class="btn" data-act="closeSheet">Cancel</button><button class="btn primary" data-act="saveProject" id="saveProject">${ex?"Save":"Create project"}</button></div>`);
   setupSig(ex&&ex.signatureId);
+  renderPlansEdit();
+}
+function readPlanNames(){if(!pdraft)return;pdraft.plans.forEach(pl=>{const el=document.getElementById("plan-name-"+pl.id);if(el)pl.name=el.value.trim()||pl.name})}
+function renderPlansEdit(){
+  const el=$("#plans-edit");if(!el||!pdraft)return;readPlanNames();
+  el.innerHTML=pdraft.plans.map(pl=>`<div class="plan-row"><div class="pt" data-pid="${pl.photoId}"></div>
+      <input id="plan-name-${pl.id}" value="${esc(pl.name)}" aria-label="Plan name" placeholder="e.g. Colo 2">
+      <button class="btn" data-act="rmPlan" data-id="${pl.id}" aria-label="Remove ${esc(pl.name)}">Remove</button></div>`).join("")
+    +Array.from({length:pdraft._planBusy},()=>`<div class="note">Adding plan…</div>`).join("")
+    +`<label class="btn addbtn">＋ Add floor plan<input type="file" accept="image/*" multiple id="planIn"></label>`;
+  hydrate(el);
+}
+async function addPlanFiles(files){
+  const d=pdraft;if(!d)return;
+  for(const f of files){
+    d._planBusy++;renderPlansEdit();
+    try{const b=await fileToJpeg(f,2600);const u=URL.createObjectURL(b);let im;try{im=await loadImg(u)}finally{URL.revokeObjectURL(u)}
+      const photoId=await putPhoto(b);d._planAdded.push(photoId);
+      const base=(f.name||"").replace(/\.[^.]+$/,"");const nice=/^(img|image|screenshot|photo|dsc|pxl)[\W_\d]/i.test(base)||!base?`Plan ${d.plans.length+1}`:base.slice(0,40);
+      d.plans.push({id:uid(),name:nice,photoId,w:im.naturalWidth,h:im.naturalHeight});
+    }catch(e){toast("That image couldn't be added. Use a screenshot (PNG or JPG).")}
+    finally{d._planBusy--;if(pdraft===d)renderPlansEdit()}
+  }
+}
+function removePlan(id){
+  readPlanNames();const pl=pdraft.plans.find(x=>x.id===id);if(!pl)return;
+  pdraft.plans=pdraft.plans.filter(x=>x.id!==id);
+  if(pdraft._planAdded.includes(pl.photoId)){pdraft._planAdded=pdraft._planAdded.filter(x=>x!==pl.photoId);delPhoto(pl.photoId)}else pdraft._planRemoved.push(pl);
+  renderPlansEdit();
 }
 async function setupSig(existing){
   const c=$("#sigc"); const r=c.getBoundingClientRect(); c.width=Math.round(r.width*2)||600; c.height=Math.round(r.height*2)||280;
@@ -478,13 +621,18 @@ async function setupSig(existing){
 async function saveProject(){
   PF.forEach(([k])=>pdraft[k]=$("#p-"+k).value.trim()); pdraft.startDate=$("#p-startDate").value; pdraft.endDate=$("#p-endDate").value;
   if(!pdraft.name){toast("Give the project a name.");$("#p-name").focus();return}
+  if(pdraft._planBusy){toast("Wait for the floor plan to finish adding.");return}
+  readPlanNames();
   try{
     const old=pdraft.signatureId;
     if(sig.dirty){const b=await new Promise(r=>$("#sigc").toBlob(r,"image/png"));pdraft.signatureId=await putPhoto(b)}
     else if(sig.cleared) pdraft.signatureId="";
-    const {_new,...body}=pdraft; if(_new)body.createdAt=localISO();
+    const {_new,_planAdded,_planRemoved,_planBusy,_saved,...body}=pdraft; if(_new)body.createdAt=localISO();
     await saveProject_(body);
+    pdraft._saved=true;
     if(old&&old!==body.signatureId)await delPhoto(old);
+    for(const pl of _planRemoved){await delPhoto(pl.photoId);
+      for(const i of issues.filter(x=>x.projectId===body.id&&x.pin&&x.pin.planId===pl.id)){i.pin=null;await saveIssue_(i)}}
     if(_new){view={name:"project",id:body.id};store.set("pl:last",body.id)}
     closeSheet();render();toast(_new?"Project created":"Project saved");
   }catch(e){toast("Couldn't save. Try again.")}
@@ -494,7 +642,8 @@ async function deleteProject(btn){
   if(!btn.classList.contains("armed")){btn.classList.add("armed");btn.textContent=`Delete project and ${list.length} issues?`;return}
   btn.disabled=true;btn.textContent="Deleting…";
   try{for(const i of list){await delIssue_(i.id);for(const a of i.photos||[])await delPhoto(a)}
-    await delPhoto(pdraft.signatureId);await delProject_(pid);closeSheet();view={name:"home"};render();toast("Project deleted")}
+    for(const pl of [...pdraft.plans,...pdraft._planRemoved])await delPhoto(pl.photoId);
+    await delPhoto(pdraft.signatureId);await delProject_(pid);pdraft._saved=true;closeSheet();view={name:"home"};render();toast("Project deleted")}
   catch(e){btn.disabled=false;toast("Couldn't finish deleting. Try again.")}
 }
 
@@ -539,8 +688,8 @@ const fileBase=p=>(p.name||"report").replace(/[^\w\-. ]+/g,"_").replace(/\s+/g,"
 function scoped(p){const s=radioVal("r-scope");const l=projIssues(p.id);return s==="Not closed"?l.filter(i=>i.status!=="Closed"):s==="Closed only"?l.filter(i=>i.status==="Closed"):l}
 function exportCSV(){
   const p=projects.find(x=>x.id===view.id);const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  const rows=[["Reference","Door / item","Location","Status","Priority","Assign to","Date raised","Fix by","Closed","Description","Comments","Photos"]];
-  scoped(p).forEach(i=>rows.push([`Issue #${i.num}`,i.title,i.location,i.status,i.priority,i.assignTo,fmtD(i.dateRaised),fmtD(i.fixBy),i.closedAt?fmtDT(i.closedAt):"",i.description,
+  const rows=[["Reference","Door / item","Location","Plan","Status","Priority","Assign to","Date raised","Fix by","Closed","Description","Comments","Photos"]];
+  scoped(p).forEach(i=>rows.push([`Issue #${i.num}`,i.title,i.location,(i.pin&&planById(p,i.pin.planId)||{}).name||"",i.status,i.priority,i.assignTo,fmtD(i.dateRaised),fmtD(i.fixBy),i.closedAt?fmtDT(i.closedAt):"",i.description,
     (i.comments||[]).slice().sort(byTime).map(c=>`${fmtDT(c.at)}: ${c.text}`).join(" | "),(i.photos||[]).length]));
   const f=new File(["﻿"+rows.map(r=>r.map(q).join(";")).join("\r\n")],($("#r-name").value.trim()||fileBase(p))+".csv",{type:"text/csv"});
   readyBlock(f,"Spreadsheet");
@@ -561,6 +710,9 @@ async function exportPDF(){
     const tot=big?list.reduce((a,i)=>a+(i.photos||[]).length,0):list.reduce((a,i)=>a+Math.min(7,(i.photos||[]).length),0);
     for(const i of list)for(const [k,id] of (i.photos||[]).entries()){if(!big&&k>6)break;st.textContent=`Preparing photos ${++n} of ${tot}…`;imgs[id]=await toDataURL(id,big?(layout==="Full width"?1400:1000):(k===0?700:360))}
     const sigImg=p.signatureId?await toDataURL(p.signatureId,500):null;
+    const planPages=[];
+    for(const pl of plansOf(p)){const pins=list.filter(i=>i.pin&&i.pin.planId===pl.id).sort((a,b)=>a.num-b.num);if(!pins.length)continue;
+      st.textContent=`Preparing floor plan ${pl.name}…`;const im=await toDataURL(pl.photoId,2600);if(im)planPages.push({pl,pins,im})}
     st.textContent="Building PDF…";
     const doc=new window.jspdf.jsPDF({unit:"mm",format:"a4",compress:true});const W=210,H=297,M=15;
     const NAVY=[22,32,43],YEL=[242,183,5],GREY=[90,101,115],LINE=[205,211,218];
@@ -573,7 +725,30 @@ async function exportPDF(){
     if(sigImg){const h=22,w=Math.min(70,h*sigImg.w/sigImg.h);doc.addImage(sigImg.u,"JPEG",M,240,w,h);doc.setDrawColor(...LINE);doc.line(M,264,M+70,264);
       doc.setTextColor(...GREY);doc.setFontSize(9);doc.text(p.auditorName||"Auditor",M,269)}
     const section=(t,y)=>{doc.setFillColor(...NAVY);doc.rect(M,y,W-2*M,10,"F");doc.setFillColor(...YEL);doc.rect(M,y+10,W-2*M,.8,"F");doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(13);doc.text(t,M+4,y+7)};
-    doc.addPage();section("Project",20);
+    /* floor plan pages, straight after the cover */
+    const SCOL={Open:[201,88,10],Fixed:[45,100,190],Closed:[37,122,76]};
+    for(const {pl,pins,im} of planPages){
+      const land=im.w>im.h, PW=land?297:210, PH=land?210:297;
+      doc.addPage("a4",land?"l":"p");
+      doc.setFillColor(...NAVY);doc.rect(M,16,PW-2*M,10,"F");doc.setFillColor(...YEL);doc.rect(M,26,PW-2*M,.8,"F");
+      doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(13);doc.text(`Floor plan · ${pl.name}`,M+4,23);
+      const ax=M, ay=31, aw=PW-2*M, ah=PH-ay-24, s=Math.min(aw/im.w,ah/im.h), dw=im.w*s, dh=im.h*s, x0=ax+(aw-dw)/2, y0=ay;
+      doc.addImage(im.u,"JPEG",x0,y0,dw,dh);doc.setDrawColor(...LINE);doc.setLineWidth(.2);doc.rect(x0,y0,dw,dh);
+      const r=pins.length>60?2:2.6;
+      for(const i of pins){
+        const px=x0+i.pin.x*dw, py=y0+i.pin.y*dh, cy=py-r*1.9, col=SCOL[i.status]||SCOL.Open;
+        doc.setFillColor(...col);doc.triangle(px-r*.62,cy+r*.55,px+r*.62,cy+r*.55,px,py,"F");
+        doc.setDrawColor(255,255,255);doc.setLineWidth(.35);doc.circle(px,cy,r,"FD");
+        doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(String(i.num).length>2?r*2.1:r*2.6);
+        doc.text(String(i.num),px,cy+r*.36,{align:"center"});
+      }
+      doc.setLineWidth(.2);
+      const cc={Open:0,Fixed:0,Closed:0};pins.forEach(i=>cc[i.status]++);
+      let lx=M, ly=y0+dh+7;doc.setFontSize(9.5);
+      for(const k of ["Open","Fixed","Closed"]){doc.setFillColor(...SCOL[k]);doc.circle(lx+1.6,ly-1.1,1.6,"F");doc.setFont("helvetica","normal");doc.setTextColor(...NAVY);const t=`${k} (${cc[k]})`;doc.text(t,lx+4.5,ly);lx+=4.5+doc.getTextWidth(t)+8}
+      doc.setTextColor(...GREY);doc.text(`Pin numbers match the issue references in this report · ${pins.length} issue${pins.length>1?"s":""} on this plan`,lx,ly);
+    }
+    doc.addPage("a4","p");section("Project",20);
     const kv=[["Project",p.name],["Job reference",p.jobRef],["Address",p.address],["Start date",fmtD(p.startDate)],["End date",fmtD(p.endDate)],["Client",p.client],["Auditor company",p.auditorCompany],["Auditor name",p.auditorName],["Total issues",String(c.total)]];
     let y=42;doc.setFontSize(11);kv.forEach(([k,v])=>{doc.setFont("helvetica","normal");doc.setTextColor(...GREY);doc.text(k+":",M+3,y);doc.setTextColor(...NAVY);const l=doc.splitTextToSize(v||"-",W-2*M-55);doc.text(l,M+55,y);y+=8*l.length});
     doc.addPage();section("Summary",20);
@@ -589,7 +764,7 @@ async function exportPDF(){
     const LH=4.6;
     /* issue details (fields + comments) in a column from LX; returns the y where it ends */
     const prepDetails=(i,VW)=>{
-      const rows=[["Issue",i.title,true],["Reference",`Issue #${i.num}`],i.location&&["Location",i.location],["Date raised",fmtD(i.dateRaised)],i.assignTo&&["Assign to",i.assignTo],["Status",i.status],["Priority",i.priority],i.fixBy&&["Fix by date",fmtD(i.fixBy)],i.status==="Closed"&&i.closedAt&&["Closed",fmtDT(i.closedAt)],i.description&&["Description",i.description]].filter(Boolean);
+      const rows=[["Issue",i.title,true],["Reference",`Issue #${i.num}`],i.location&&["Location",i.location],i.pin&&planById(p,i.pin.planId)&&["Floor plan",`${planById(p,i.pin.planId).name} (pin ${i.num})`],["Date raised",fmtD(i.dateRaised)],i.assignTo&&["Assign to",i.assignTo],["Status",i.status],["Priority",i.priority],i.fixBy&&["Fix by date",fmtD(i.fixBy)],i.status==="Closed"&&i.closedAt&&["Closed",fmtDT(i.closedAt)],i.description&&["Description",i.description]].filter(Boolean);
       doc.setFontSize(10);
       const lines=rows.map(r=>doc.splitTextToSize(String(r[1]||""),VW));
       const cms=(i.comments||[]).slice().sort(byTime).map(cm=>[fmtDT(cm.at),doc.splitTextToSize(cm.text,VW)]);
@@ -636,9 +811,10 @@ async function exportPDF(){
       }
     }
     const np=doc.getNumberOfPages();
-    for(let k=2;k<=np;k++){doc.setPage(k);doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(...GREY);
-      doc.text(p.name,W/2,10,{align:"center",maxWidth:120});doc.text(fmtD(p.startDate||today()),W-M,10,{align:"right"});
-      doc.text(p.footer||p.auditorCompany||"",W/2,H-8,{align:"center"});doc.text(`Page ${k} of ${np}`,W-M,H-8,{align:"right"})}
+    for(let k=2;k<=np;k++){doc.setPage(k);const pw=doc.internal.pageSize.getWidth(),ph=doc.internal.pageSize.getHeight();
+      doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(...GREY);
+      doc.text(p.name,pw/2,10,{align:"center",maxWidth:120});doc.text(fmtD(p.startDate||today()),pw-M,10,{align:"right"});
+      doc.text(p.footer||p.auditorCompany||"",pw/2,ph-8,{align:"center"});doc.text(`Page ${k} of ${np}`,pw-M,ph-8,{align:"right"})}
     st.textContent=`${np} pages, ${list.length} issues.`;
     readyBlock(new File([doc.output("blob")],($("#r-name").value.trim()||fileBase(p))+".pdf",{type:"application/pdf"}),"PDF report");
   }catch(e){console.error(e);st.textContent="Something went wrong building the PDF. Try again, or make the spreadsheet."}
@@ -650,7 +826,7 @@ function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+
 function unb64(str){const s=atob(str);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer}
 async function makeBackup(){
   const p=projects.find(x=>x.id===view.id), list=projIssues(p.id), st=$("#r-status");
-  const ids=[...new Set([p.signatureId,...list.flatMap(i=>i.photos||[])].filter(Boolean))];
+  const ids=[...new Set([p.signatureId,...plansOf(p).map(x=>x.photoId),...list.flatMap(i=>i.photos||[])].filter(Boolean))];
   const parts=[`{"app":"site-punch-list","version":1,"exported":${JSON.stringify(localISO())},"projects":${JSON.stringify([p])},"issues":${JSON.stringify(list)},"photos":{`];
   let n=0;
   for(const id of ids){const r=await DB.get("photos",id);if(!r)continue;st.textContent=`Packing photos ${++n} of ${ids.length}…`;
@@ -690,6 +866,12 @@ document.addEventListener("click",e=>{
     case "cancelIssue":cancelIssue();break;
     case "delIssue":deleteIssue(b);break;
     case "markup":openMarkup(+b.dataset.k);break;
+    case "pinIssue":openIssue(b.dataset.id);break;
+    case "zoomIn":zoomTo(zstep(1),"planScroll",render);break;
+    case "zoomOut":zoomTo(zstep(-1),"planScroll",render);break;
+    case "pickPin":openPicker();break;
+    case "clearPin":draft.pin=null;renderPinInfo();break;
+    case "rmPlan":removePlan(b.dataset.id);break;
     case "addComment":{const t=$("#i-cm");const v=t.value.trim();if(!v){t.focus();break}draft.comments.push({at:localISO(),text:v});t.value="";renderComments();break}
     case "rmComment":draft.comments.splice(+b.dataset.k,1);renderComments();break;
     case "report":openReport();break;
@@ -705,11 +887,14 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("change",e=>{
   if(e.target.name==="flt"){filter=e.target.value;render()}
+  if(e.target.name==="pmode"){pmode=e.target.value;store.set("pl:pmode",pmode);render()}
+  if(e.target.name==="plansel"){planSel=e.target.value;render()}
+  if(e.target.id==="planIn"){const f=[...e.target.files];e.target.value="";addPlanFiles(f)}
   if(e.target.id==="camIn"||e.target.id==="fileIn"){const f=[...e.target.files];e.target.value="";addFiles(f)}
   if(e.target.id==="importIn"){const f=e.target.files[0];e.target.value="";if(f)importBackup(f)}
 });
 document.addEventListener("input",e=>{if(e.target.id==="search"){query=e.target.value;const pos=e.target.selectionStart;render();const s=$("#search");s.focus();try{s.setSelectionRange(pos,pos)}catch(_){}}});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(!$("#mk").hidden)closeMarkup();else if(!$("#sheet").hidden){draft?cancelIssue():closeSheet()}}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(!$("#pk").hidden)closePicker();else if(!$("#mk").hidden)closeMarkup();else if(!$("#sheet").hidden){draft?cancelIssue():closeSheet()}}});
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet"){draft?cancelIssue():closeSheet()}});
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;if(view.name==="home")render()});
 
@@ -721,6 +906,7 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=
     [projects,issues]=await Promise.all([DB.all("projects"),DB.all("issues")]);
     for(const p of projects)await renumber(p.id);
     ready=true;
+    pmode=store.get("pl:pmode")==="plan"?"plan":"list";
     const lastId=store.get("pl:last");if(lastId&&projects.some(p=>p.id===lastId))view={name:"project",id:lastId};
   }catch(e){dbError="This browser blocked on-device storage.";}
   render();
